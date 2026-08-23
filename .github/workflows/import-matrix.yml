@@ -1,0 +1,61 @@
+name: import-matrix
+
+# Phase 0B.4/0B.5：Chaquopy 真机/模拟器导入矩阵
+# 阶段 1（默认）：最小 FastAPI + pydantic hello world
+# 阶段 2（full-graph=true 或手动触发）：BtDeck 完整 import graph +
+#   /health/live + 一次 Alembic 迁移 + 前端静态资源加载 + 16KB page-size
+on:
+  workflow_dispatch:
+    inputs:
+      full-graph:
+        description: "跑 BtDeck 完整 import graph（需主仓 dist 资源）"
+        type: boolean
+        default: false
+  schedule:
+    - cron: "0 3 * * 1" # 每周一复核（防止上游/NDK 漂移）
+
+permissions:
+  contents: read
+
+jobs:
+  chaquopy-import:
+    name: import ${{ matrix.abi }} (api ${{ matrix.api }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        abi: [arm64-v8a, x86_64]
+        api: [34, 35] # 代表设备；16KB page-size 校验依赖 API 35 模拟器镜像
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 启动模拟器
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          arch: ${{ matrix.abi == 'arm64-v8a' && 'arm64-v8a' || 'x86_64' }}
+          target: default
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          script: |
+            # 冒烟：确认系统与 page-size
+            adb shell getprop ro.product.cpu.abi
+            adb shell getconf PAGESIZE
+
+      - name: Gradle 构建 testapp（Chaquopy + 本仓索引）
+        run: |
+          cd testapp
+          echo "chaquopy.extraIndexUrl=https://${GITHUB_REPOSITORY_OWNER}.github.io/android-wheels/simple/" \
+            >> local.properties
+          ./gradlew :app:assembleDebug
+
+      - name: 安装并运行导入测试
+        run: |
+          cd testapp
+          ./gradlew :app:connectedDebugAndroidTest
+
+      - name: 完整 import graph（可选阶段 2）
+        if: ${{ github.event.inputs.full-graph == 'true' }}
+        run: |
+          echo "TODO(phase-0B.4): 拉取 BtDeck backend frontend_dist + alembic 资源注入 testapp"
+          echo "TODO: 验证 /health/live、一次迁移、静态资源、冷启动、升级安装、wheel 缺失失败信息"
+          exit 1 # 阶段 2 脚手架就绪即失败——直到真实资源接入

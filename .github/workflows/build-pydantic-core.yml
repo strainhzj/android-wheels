@@ -1,0 +1,113 @@
+name: build-pydantic-core
+
+# Phase 0B.1/0B.2/0B.3：固定版本四 ABI 构建 + tag/ELF 校验 + PEP 503 索引发布
+# 闸门判据见 docs/gate.md；失败 = BtDeck 服务端模式暂停，伴侣模式先行。
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: ${{ matrix.abi }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { abi: arm64-v8a,  target: aarch64-linux-android }
+          - { abi: armeabi-v7a, target: armv7-linux-androideabi }
+          - { abi: x86_64,      target: x86_64-linux-android }
+          - { abi: x86,         target: i686-linux-android }
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 固定工具链版本（versions.env 单一来源）
+        run: cat versions.env && grep -q '^PYDANTIC_CORE_VERSION=' versions.env
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: 安装 NDK（版本锁定 versions.env）
+        run: |
+          source versions.env
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "ndk;${ANDROID_NDK_VERSION}" > /dev/null
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/${ANDROID_NDK_VERSION}" >> "$GITHUB_ENV"
+
+      - name: 安装构建工具（版本锁定）
+        run: |
+          source versions.env
+          pip install "maturin==1.8.2" "cargo-ndk==${CARGO_NDK_VERSION}" packaging
+
+      - name: 构建 wheel
+        run: bash scripts/build-pydantic-core.sh "${{ matrix.target }}" "${{ matrix.abi }}"
+
+      - name: 记录 sdist hash（首次运行后回填 versions.env）
+        run: sha256sum pydantic_core-*.tar.gz || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ matrix.abi }}
+          path: dist/${{ matrix.abi }}/*.whl
+          if-no-files-found: error
+
+  index:
+    name: PEP 503 index
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write        # 推 gh-pages
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - run: python scripts/make-simple-index.py dist public
+
+      - name: 生成 SBOM 与构建元数据
+        run: |
+          mkdir -p public
+          {
+            echo "# build metadata"
+            echo "date: $(date -u +%FT%TZ)"
+            echo "commit: $GITHUB_SHA"
+            cat versions.env
+          } > public/BUILD-INFO.txt
+          pip install cyclonedx-bom && cyclonedx-bom || true
+
+      - uses: peaceiris/actions-gh-pages@v4
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./public
+          keep_files: false
+
+  gate-summary:
+    name: 闸门结论
+    needs: [build, index]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: 汇总（结论追加登记到 docs/gate.md 由人工/后续 job 完成）
+        run: |
+          echo "build=${{ needs.build.result }} index=${{ needs.index.result }}"
+          if [[ "${{ needs.build.result }}" != "success" || "${{ needs.index.result }}" != "success" ]]; then
+            echo "::error::Phase 0B 构建闸门未通过——BtDeck 服务端模式暂停，伴侣模式先行"
+            exit 1
+          fi
