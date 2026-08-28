@@ -18,6 +18,11 @@ def check_imports() -> dict:
     }
 
 
+def check_imports_str(name: str) -> str:
+    """按包名返回固定版本（Kotlin 侧经 callAttr 消费，规避 asMap 泛型推断）。"""
+    return check_imports()[name]
+
+
 def check_model_roundtrip() -> str:
     """pydantic-core native 路径冒烟：模型构建 + 校验 + 序列化。"""
     from pydantic import BaseModel

@@ -20,10 +20,12 @@ class PythonImportTest {
 
     @Test
     fun importsMatchPinnedVersions() {
-        val versions = py().getModule("wheelcheck").callAttr("check_imports").asMap()
-        assertEquals("2.41.5", versions["pydantic_core"]?.toString())
-        assertEquals("2.12.4", versions["pydantic"]?.toString())
-        assertEquals("0.115.6", versions["fastapi"]?.toString())
+        // 不用 asMap()：其无推断依据的泛型签名会让 Kotlin 编译失败
+        // （run 33165645655 实证），改为按名取版本的字符串接口
+        val wc = py().getModule("wheelcheck")
+        assertEquals("2.41.5", wc.callAttr("check_imports_str", "pydantic_core").toString())
+        assertEquals("2.12.4", wc.callAttr("check_imports_str", "pydantic").toString())
+        assertEquals("0.115.6", wc.callAttr("check_imports_str", "fastapi").toString())
     }
 
     @Test
