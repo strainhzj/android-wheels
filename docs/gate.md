@@ -90,3 +90,9 @@
   libdl 为 Android 系统库，不应 vendor 进 wheel）
 - 结论与下一步: --skip-auditwheel 跳过 repair（纯 Rust 扩展仅依赖系统库），
   tag/ELF 校验由 retag + check-wheel-tag 承担，第六轮重试。
+
+### 2026-08-28 run 33168402257（失败，预期内）
+- run: build-pydantic-core @5a23f5c
+- 判据: 1 ❌（check-wheel-tag 新增的 DT_NEEDED 断言拦截：空动态库 stub 无符号可解析，
+  lld --as-needed 丢弃 NEEDED——断言按设计工作）
+- 结论与下一步: retag-wheel.py 集成 patchelf --add-needed 显式补记（RECORD 哈希同步）。

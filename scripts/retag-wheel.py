@@ -6,11 +6,12 @@
 对齐 Chaquopy 官方仓库扩展 wheel 的实测形态（bcrypt cp312 android_21，2026-08-28 解剖）：
 1. 文件名 tag：cp312-cp312-android_<api>_<abi>（PEP 738，非 abi3）；
 2. 包内扩展 .so 用裸文件名（_pydantic_core.so），不带 cpython-312-<triple> 后缀；
-3. （由 check-wheel-tag.py 断言）.so 的 DT_NEEDED 须含 libpython3.12.so —— 构建侧
-   以空动态库 stub + -lpython3.12 产生该依赖，符号在运行时由 Chaquopy 的
-   libpython3.12.so 解析。
+3. .so 的 DT_NEEDED 须含 libpython3.12.so —— Py 符号运行时由 Chaquopy 内嵌的
+   libpython3.12.so 解析。链接期空 stub 无符号可解析，lld --as-needed 会丢弃
+   NEEDED（run 33168402257 实证），故经 patchelf --add-needed 显式补记；
+   RECORD 哈希随内容同步更新。
 
-幂等：已符合目标形态时原样通过。重标前断言 .so ELF machine 与 ABI 一致。
+幂等：已符合目标形态时原样通过。处理前断言 .so ELF machine 与 ABI 一致。
 """
 
 from __future__ import annotations
@@ -22,7 +23,9 @@ import io
 import re
 import shutil
 import struct
+import subprocess
 import sys
+import tempfile
 import zipfile
 from pathlib import Path
 
@@ -41,25 +44,52 @@ def elf_machine(data: bytes) -> int:
     return struct.unpack_from("<H", data, 18)[0]
 
 
-def rewrite_record(zin: zipfile.ZipFile, renames: dict[str, str]) -> bytes:
-    """按 so 重命名同步 dist-info/RECORD（哈希与文件名）。"""
-    record_name = next(n for n in zin.namelist() if n.endswith(".dist-info/RECORD"))
-    rows = list(csv.reader(io.StringIO(zin.read(record_name).decode("utf-8"))))
-    out_rows = []
-    for row in rows:
-        if not row:
-            out_rows.append(row)
+def elf_dt_needed(data: bytes) -> list[str]:
+    # ELF64：PT_DYNAMIC → DT_NEEDED（tag=1），字符串经 DT_STRTAB（文件偏移）
+    if data[:4] != b"\x7fELF" or data[4] != 2:
+        raise ValueError("not an ELF64 file")
+    e_phoff = struct.unpack_from("<Q", data, 32)[0]
+    e_phentsize = struct.unpack_from("<H", data, 54)[0]
+    e_phnum = struct.unpack_from("<H", data, 56)[0]
+    dyn = strtab = None
+    needed_offs: list[int] = []
+    for i in range(e_phnum):
+        off = e_phoff + i * e_phentsize
+        if struct.unpack_from("<I", data, off)[0] != 2:  # PT_DYNAMIC
             continue
-        name = row[0]
-        if name in renames:
-            data = zin.read(name)
-            digest = base64.urlsafe_b64encode(hashlib.sha256(data).digest()).rstrip(b"=").decode()
-            out_rows.append([renames[name], f"sha256={digest}", str(len(data))])
-        else:
-            out_rows.append(row)
-    buf = io.StringIO()
-    csv.writer(buf, lineterminator="\n").writerows(out_rows)
-    return buf.getvalue().encode("utf-8")
+        p_offset = struct.unpack_from("<Q", data, off + 8)[0]
+        p_filesz = struct.unpack_from("<Q", data, off + 32)[0]
+        o, end = p_offset, p_offset + p_filesz
+        while o < end:
+            tag, val = struct.unpack_from("<QQ", data, o)
+            if tag == 0:
+                break
+            if tag == 1:
+                needed_offs.append(val)
+            elif tag == 5:
+                strtab = val
+            o += 16
+        break
+    if strtab is None:
+        raise ValueError("no DT_STRTAB")
+    out = []
+    for v in needed_offs:
+        e = data.index(b"\x00", strtab + v)
+        out.append(data[strtab + v : e].decode())
+    return out
+
+
+def patchelf_add_needed(data: bytes, libname: str) -> bytes:
+    """经 patchelf 给 .so 补 DT_NEEDED（patchelf 由 CI pip 安装）。"""
+    with tempfile.TemporaryDirectory() as td:
+        so = Path(td) / "lib.so"
+        so.write_bytes(data)
+        subprocess.run(
+            ["patchelf", "--add-needed", libname, str(so)],
+            check=True,
+            capture_output=True,
+        )
+        return so.read_bytes()
 
 
 def main() -> int:
@@ -67,7 +97,7 @@ def main() -> int:
     abi = sys.argv[2]
     py_tag = f"cp{sys.argv[3].replace('.', '')}"
     expected_platform = sys.argv[4]
-    bare_so_suffix = ".so"
+    libpython = f"libpython{sys.argv[3]}.so"
     so_ext_pattern = re.compile(r"^(?P<base>.+?)(?:\.cpython-[\d]+[^/]*|\.abi3)?\.so$")
 
     wheels = sorted(dist_dir.glob("*.whl"))
@@ -83,16 +113,19 @@ def main() -> int:
     failures: list[str] = []
 
     for wheel in wheels:
-        # 已处理过的（包内 so 已是裸名）且文件名正确 → 幂等通过
-        already = False
+        # 目标形态 = 文件名正确 + 包内 so 裸名 + NEEDED 含 libpython
         if final_name_pattern.match(wheel.name):
             with zipfile.ZipFile(wheel) as zf:
-                already = not any(
+                ok_form = not any(
                     re.search(r"\.cpython-[\d].*\.so$|\.abi3\.so$", n) for n in zf.namelist()
                 )
-        if already:
-            print(f"PASS-THROUGH: {wheel.name} 已是目标形态")
-            continue
+                ok_needed = all(
+                    libpython in elf_dt_needed(zf.read(n))
+                    for n in zf.namelist() if n.endswith(".so")
+                )
+            if ok_form and ok_needed:
+                print(f"PASS-THROUGH: {wheel.name} 已是目标形态")
+                continue
 
         m = re.match(r"^(?P<name>[A-Za-z0-9_.]+)-(?P<ver>[^-]+)-.+-[^-]+\.whl$", wheel.name)
         if not m:
@@ -100,25 +133,42 @@ def main() -> int:
             continue
         name, ver = m.group("name"), m.group("ver")
 
-        # ELF machine 与目标 ABI 一致才允许处理
-        renames: dict[str, str] = {}
+        # 更新计划：{原路径: (新路径 or None, 新内容 or None)}
+        so_updates: dict[str, tuple[str | None, bytes | None]] = {}
         with zipfile.ZipFile(wheel) as zf:
             so_names = [n for n in zf.namelist() if n.endswith(".so")]
             if not so_names:
                 failures.append(f"{wheel.name}: 缺少 native .so")
                 continue
             for so in so_names:
-                machine = elf_machine(zf.read(so)[:64])
+                data = zf.read(so)
+                machine = elf_machine(data[:64])
                 if machine != expected_machine:
                     failures.append(f"{wheel.name}:{so}: ELF machine {machine} != {desc}({expected_machine})")
+                    continue
+                new_path = None
+                base = so.rsplit("/", 1)[-1]
+                mm = so_ext_pattern.match(base)
+                bare = mm.group("base") + ".so"
+                if base != bare:
+                    new_path = (so.rsplit("/", 1)[0] + "/" + bare) if "/" in so else bare
+                new_data = None
+                if libpython not in elf_dt_needed(data):
+                    try:
+                        new_data = patchelf_add_needed(data, libpython)
+                    except FileNotFoundError:
+                        failures.append(
+                            f"{wheel.name}:{so}: DT_NEEDED 缺 {libpython} 且本机无 patchelf"
+                            "（CI 由 pip install patchelf 提供）"
+                        )
+                        continue
+                    except subprocess.CalledProcessError as exc:
+                        failures.append(f"{wheel.name}:{so}: patchelf 失败 {exc.stderr!r}")
+                        continue
+                if new_path or new_data is not None:
+                    so_updates[so] = (new_path, new_data)
             if failures:
                 continue
-            # 计划 so 重命名：去平台后缀，保留裸 .so
-            for so in so_names:
-                mm = so_ext_pattern.match(so.rsplit("/", 1)[-1])
-                if mm and so.rsplit("/", 1)[-1] != mm.group("base") + bare_so_suffix:
-                    renames[so] = so.rsplit("/", 1)[0] + "/" + mm.group("base") + bare_so_suffix \
-                        if "/" in so else mm.group("base") + bare_so_suffix
 
         new_name = f"{name}-{ver}-{final_tag}.whl"
         dest = wheel.with_name(new_name)
@@ -126,7 +176,33 @@ def main() -> int:
         with zipfile.ZipFile(wheel) as zin, zipfile.ZipFile(
             tmp, "w", compression=zipfile.ZIP_DEFLATED
         ) as zout:
-            record_new = rewrite_record(zin, renames) if renames else None
+            record_name = next(
+                (n for n in zin.namelist() if n.endswith(".dist-info/RECORD")), None
+            )
+            record_new: bytes | None = None
+            if record_name and so_updates:
+                rows = list(csv.reader(io.StringIO(zin.read(record_name).decode("utf-8"))))
+                out_rows = []
+                content_by_new_name = {
+                    (new_path or old): (new_data if new_data is not None else zin.read(old))
+                    for old, (new_path, new_data) in so_updates.items()
+                }
+                for row in rows:
+                    if not row:
+                        out_rows.append(row)
+                        continue
+                    fname = row[0]
+                    if fname in content_by_new_name:
+                        payload = content_by_new_name[fname]
+                        digest = base64.urlsafe_b64encode(
+                            hashlib.sha256(payload).digest()
+                        ).rstrip(b"=").decode()
+                        out_rows.append([fname, f"sha256={digest}", str(len(payload))])
+                    else:
+                        out_rows.append(row)
+                buf = io.StringIO()
+                csv.writer(buf, lineterminator="\n").writerows(out_rows)
+                record_new = buf.getvalue().encode("utf-8")
             for item in zin.infolist():
                 data = zin.read(item.filename)
                 if item.filename.endswith(".dist-info/WHEEL"):
@@ -135,14 +211,19 @@ def main() -> int:
                     data = text.encode("utf-8")
                 elif record_new is not None and item.filename.endswith(".dist-info/RECORD"):
                     data = record_new
-                elif item.filename in renames:
-                    item = zipfile.ZipInfo(renames[item.filename], date_time=item.date_time)
-                    item.compress_type = zipfile.ZIP_DEFLATED
+                elif item.filename in so_updates:
+                    new_path, new_data = so_updates[item.filename]
+                    if new_data is not None:
+                        data = new_data
+                    if new_path:
+                        item = zipfile.ZipInfo(new_path, date_time=item.date_time)
+                        item.compress_type = zipfile.ZIP_DEFLATED
                 zout.writestr(item, data)
         shutil.move(str(tmp), str(dest))
         wheel.unlink()
-        extra = f"；so 重命名 {len(renames)} 个" if renames else ""
-        print(f"RETAG: {wheel.name} -> {new_name}{extra}")
+        n_rename = sum(1 for _, (np_, _) in so_updates.items() if np_)
+        n_patch = sum(1 for _, (_, nd) in so_updates.items() if nd is not None)
+        print(f"RETAG: {wheel.name} -> {new_name}（so 改名 {n_rename}、补 NEEDED {n_patch}）")
 
     if failures:
         print("\n".join(f"FAIL: {f}" for f in failures))

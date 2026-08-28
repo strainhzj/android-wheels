@@ -51,8 +51,9 @@ jobs:
       - name: 安装构建工具（版本锁定）
         run: |
           source versions.env
-          # cargo-ndk 只发布在 crates.io（PyPI 无此包，首建 run 33163185434 实证），经 cargo 安装
-          pip install "maturin==1.8.2" packaging
+          # cargo-ndk 只发布在 crates.io（PyPI 无此包，首建 run 33163185434 实证），经 cargo 安装；
+          # patchelf 用于给扩展 .so 补 DT_NEEDED libpython3.12.so（lld --as-needed 会丢弃空 stub 的 NEEDED）
+          pip install "maturin==1.8.2" packaging patchelf
           cargo install cargo-ndk --locked --version "${CARGO_NDK_VERSION}"
 
       - name: 构建 wheel
