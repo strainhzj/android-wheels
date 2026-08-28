@@ -81,3 +81,12 @@
   pyo3-config 仍使链接层请求 libpython；Android 嵌入式解释器无独立 libpython）
 - 结论与下一步: NDK llvm-ar 生成空静态档案 + RUSTFLAGS -L 注入（extension-module
   模式不取符号，Py* 运行时由 Chaquopy 解释器解析），第五轮重试。
+
+### 2026-08-28 run 33164468777（失败）
+- run: https://github.com/strainhzj/android-wheels/actions/runs/33164468777
+- 变更: b735061（空 libpython3.12.a 静态档案 + RUSTFLAGS -L）
+- 判据: 1 ❌（Rust 编译与链接已通过，挂 maturin 1.8 的 android wheel repair：
+  "Cannot repair wheel, because required library libdl.so could not be located"——
+  libdl 为 Android 系统库，不应 vendor 进 wheel）
+- 结论与下一步: --skip-auditwheel 跳过 repair（纯 Rust 扩展仅依赖系统库），
+  tag/ELF 校验由 retag + check-wheel-tag 承担，第六轮重试。

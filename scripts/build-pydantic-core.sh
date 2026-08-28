@@ -56,7 +56,12 @@ maturin build --release \
     --target "${RUST_TARGET}" \
     -i "${CHAQUOPY_PYTHON_VERSION}" \
     --features pyo3/extension-module \
+    --skip-auditwheel \
     --out "${REPO_DIR}/dist/${ANDROID_ABI}"
+# --skip-auditwheel：maturin 1.8 对 android wheel 自动执行 repair，试图 vendor
+# libdl.so 等系统库并因找不到而失败（run 33164468777）。纯 Rust 扩展仅依赖
+# Android 系统库（libc/libm/libdl），随包 vendor 反而错误；tag/ELF 校验由
+# 后续 retag + check-wheel-tag 承担。
 
 # 2b) 重标为 Chaquopy 认可的 PEP 738 tag：cp312-cp312-android_<api>_<abi>
 TAG_KEY="ABI_${ANDROID_ABI//-/_}_TAG"
