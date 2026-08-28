@@ -73,6 +73,8 @@ def elf_dt_needed(data: bytes) -> list[str]:
 
     strtab = None
     needed_offs: list[int] = []
+    if dyn is None:
+        raise ValueError("no PT_DYNAMIC")
     o, end = dyn
     while o < end:
         tag, val = struct.unpack_from("<QQ", data, o)
@@ -167,7 +169,11 @@ def main() -> int:
                 if base != bare:
                     new_path = (so.rsplit("/", 1)[0] + "/" + bare) if "/" in so else bare
                 new_data = None
-                if libpython not in elf_dt_needed(data):
+                try:
+                    needed_missing = libpython not in elf_dt_needed(data)
+                except ValueError:
+                    needed_missing = True  # 异常形态（无动态段等）→ 交 patchelf 处理
+                if needed_missing:
                     try:
                         new_data = patchelf_add_needed(data, libpython)
                     except FileNotFoundError:
@@ -196,22 +202,24 @@ def main() -> int:
             record_new: bytes | None = None
             if record_name and so_updates:
                 rows = list(csv.reader(io.StringIO(zin.read(record_name).decode("utf-8"))))
+                # 键必须按 RECORD 行里的原始（旧）路径匹配：行内是旧名，
+                # so_updates 的 key 也是旧名（值才是新名/新内容）
+                overrides = {}
+                for old, (new_path, new_data) in so_updates.items():
+                    payload = new_data if new_data is not None else zin.read(old)
+                    overrides[old] = (new_path or old, payload)
                 out_rows = []
-                content_by_new_name = {
-                    (new_path or old): (new_data if new_data is not None else zin.read(old))
-                    for old, (new_path, new_data) in so_updates.items()
-                }
                 for row in rows:
                     if not row:
                         out_rows.append(row)
                         continue
                     fname = row[0]
-                    if fname in content_by_new_name:
-                        payload = content_by_new_name[fname]
+                    if fname in overrides:
+                        new_fname, payload = overrides[fname]
                         digest = base64.urlsafe_b64encode(
                             hashlib.sha256(payload).digest()
                         ).rstrip(b"=").decode()
-                        out_rows.append([fname, f"sha256={digest}", str(len(payload))])
+                        out_rows.append([new_fname, f"sha256={digest}", str(len(payload))])
                     else:
                         out_rows.append(row)
                 buf = io.StringIO()

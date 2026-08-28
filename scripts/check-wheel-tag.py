@@ -78,6 +78,8 @@ def elf_dt_needed(data: bytes) -> list[str]:
 
     strtab = None
     needed_offs: list[int] = []
+    if dyn is None:
+        raise ValueError("no PT_DYNAMIC")
     o, end = dyn
     while o < end:
         tag, val = struct.unpack_from("<QQ", data, o)

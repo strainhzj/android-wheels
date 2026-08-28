@@ -46,6 +46,27 @@ jobs:
         with:
           gradle-version: "8.9"
 
+      - name: 诊断：下载本仓 wheel 并模拟 Chaquopy RECORD 解析
+        run: |
+          python3 - <<'EOF'
+          import csv, io, urllib.request, zipfile
+          url = "https://strainhzj.github.io/android-wheels/simple/pydantic-core/pydantic_core-2.41.5-cp312-cp312-android_24_x86_64.whl"
+          data = urllib.request.urlopen(url).read()
+          print("wheel bytes:", len(data))
+          with zipfile.ZipFile(io.BytesIO(data)) as z:
+              print("so files:", [n for n in z.namelist() if n.endswith(".so")])
+              text = z.read("pydantic_core-2.41.5.dist-info/RECORD").decode()
+          print("RECORD rows（Chaquopy 17.0.0 逐行视角）:")
+          for i, row in enumerate(csv.reader(io.StringIO(text))):
+              row += [None] * (len(row) - 3)
+              try:
+                  path, hash_str, size_str = row
+              except ValueError:
+                  print(f"  row{i} UNPACK-FAIL {row}"); continue
+              flag = "  <-- int('') 会崩" if (size_str == "" ) else ""
+              print(f"  row{i} path={path!r} hash={bool(hash_str)} size={size_str!r}{flag}")
+          EOF
+
       - name: Gradle 构建 testapp（Chaquopy + 本仓索引，构建期即验证 wheel 解析）
         run: gradle :app:assembleDebug -p testapp "-Pbtdeck.wheels.index=$WHEELS_INDEX"
 
