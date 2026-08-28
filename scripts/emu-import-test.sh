@@ -16,10 +16,14 @@ if "${GRADLE_CMD[@]}"; then
   exit 0
 fi
 
-echo "==== connected test failed, dumping logcat ===="
+echo "==== connected test failed, dumping diagnostics ===="
 adb logcat -d -b crash > "$HOME/logcat-crash.txt" 2>/dev/null || true
 echo "---- crash buffer（最近 20k）----"
 tail -c 20000 "$HOME/logcat-crash.txt" || true
-echo "---- 应用相关行（btdeck/chaquopy/python/pydantic/linker/signal，最近 300 行）----"
-adb logcat -d | grep -iE "btdeck|chaquopy|pydantic|python|linker|SIGSEGV|SIGABRT|Fatal signal" | tail -n 300 || true
+echo "---- AndroidRuntime/DEBUG 定向（最近 200 行）----"
+adb logcat -d -s AndroidRuntime:E DEBUG:F libc:F linker:E 2>/dev/null | tail -n 200 || true
+echo "---- 应用相关行（最近 300 行）----"
+adb logcat -d | grep -iE "btdeck|chaquopy|pydantic|python" | tail -n 300 || true
+echo "---- 仪表测试 XML 报告 ----"
+find testapp/app/build/outputs/androidTest-results -name '*.xml' -exec cat {} \; 2>/dev/null | tail -c 20000 || true
 exit 1
