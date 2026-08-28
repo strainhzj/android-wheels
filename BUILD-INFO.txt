@@ -1,6 +1,6 @@
 # build metadata
-date: 2026-08-28T10:57:33Z
-commit: 0de297e7469f0bc78b3b71e5fa0b02c9d5ac42d0
+date: 2026-08-28T11:02:24Z
+commit: 4871b7ed512b5f8fa18e53ae4ef320cbbd1299a1
 # 固定版本清单（单一来源）——任何改动走 PR 并更新 docs/gate.md 的决策记录
 # 2026-08-28 首建修正（详见 docs/gate.md 决策记录）：
 #   - cargo-ndk 不在 PyPI，经 cargo install 安装；
