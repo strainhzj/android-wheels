@@ -123,3 +123,15 @@
 - 结论: **判据 1-4 达成；5（完整 import graph）与 6（16KB/冷启动/升级）为阶段 2
   专项**——API35/16KB 使用 google_apis_ps16k 镜像与本地硬件加速 AVD 执行
   （用户已批准 AVD 重建），不依赖 GitHub 软件模拟。闸门未全过，Phase 3 仍封锁。
+
+### 2026-08-28（晚二）判据 6 之 16KB page-size：发现缺陷→修复→双页验证达成
+
+- **发现**：本地 ps16k AVD（android-35 google_apis_ps16k x86_64，PAGESIZE=16384，WHPX 硬件加速冷启动 42s）上旧 wheel 导入即崩——tombstone 实锤 linker64 `ElfReader::LoadSegments` 内 memset SEGV_ACCERR；旧 wheel PT_LOAD 实查 p_align=4096×5。此前 CI 未见此问题因 runner 全为 4096 镜像；"gradle 全量跑部分通过"为 runner 进程重启假象，solo 复测修正结论。
+- **修复**：构建链加 `-Wl,-z,max-page-size=16384`（NDK r27 经 cargo-ndk/maturin 链路默认仍产出 4096）；check-wheel-tag 新增断言"所有 PT_LOAD p_align≥16384"（本地验证对旧 wheel 精确拦截）。
+- **验证**（新 wheel p_align=16384×5，自 Pages 索引安装）：
+  - 16KB AVD：全套件 **6/6 通过**（imports/roundtrip/fastapiHealthLive/httpx 链/testclient 链/abi）；
+  - 常规 4096 AVD（android-35 google_apis x86_64）：全套件 **6/6 通过**（无回归）；
+  - `adb install -r` 覆盖安装（升级安装语义）两设备均成功后跑测试。
+- **附带发现**：fastapi.testclient 深导入链在主线程默认栈上于 Python 递归限触发前耗尽 C 栈（ps16k 每帧更大）→ 测试侧以 16MB 大栈线程执行（testapp wheelcheck._run_on_big_stack）；**Phase 3 深导入图（BtDeck app.main）必须沿用此技法**。
+- **判据 6 剩余**：冷启动计时留痕（16K 首启 42s 已录）、wheel 缺失失败信息（Chaquopy pip 构建期报错形态已具备）；完整"升级安装"演练随阶段 2 资源注入后的 testapp 版本化再做。
+- 结论：**判据 6 之 16KB 核心达成**（wheel 双页大小验证）；判据 5 仍待阶段 2 实装。
