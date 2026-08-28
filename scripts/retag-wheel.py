@@ -45,37 +45,51 @@ def elf_machine(data: bytes) -> int:
 
 
 def elf_dt_needed(data: bytes) -> list[str]:
-    # ELF64：PT_DYNAMIC → DT_NEEDED（tag=1），字符串经 DT_STRTAB（文件偏移）
+    # ELF64：PT_DYNAMIC → DT_NEEDED（tag=1）；DT_STRTAB 的 d_ptr 是虚拟地址，
+    #须经 PT_LOAD 映射翻译成文件偏移（patchelf 重写后 vaddr≠offset）
     if data[:4] != b"\x7fELF" or data[4] != 2:
         raise ValueError("not an ELF64 file")
     e_phoff = struct.unpack_from("<Q", data, 32)[0]
     e_phentsize = struct.unpack_from("<H", data, 54)[0]
     e_phnum = struct.unpack_from("<H", data, 56)[0]
-    dyn = strtab = None
-    needed_offs: list[int] = []
+    loads: list[tuple[int, int, int]] = []  # (p_vaddr, p_filesz, p_offset)
+    dyn = None
     for i in range(e_phnum):
         off = e_phoff + i * e_phentsize
-        if struct.unpack_from("<I", data, off)[0] != 2:  # PT_DYNAMIC
-            continue
+        p_type = struct.unpack_from("<I", data, off)[0]
         p_offset = struct.unpack_from("<Q", data, off + 8)[0]
+        p_vaddr = struct.unpack_from("<Q", data, off + 16)[0]
         p_filesz = struct.unpack_from("<Q", data, off + 32)[0]
-        o, end = p_offset, p_offset + p_filesz
-        while o < end:
-            tag, val = struct.unpack_from("<QQ", data, o)
-            if tag == 0:
-                break
-            if tag == 1:
-                needed_offs.append(val)
-            elif tag == 5:
-                strtab = val
-            o += 16
-        break
+        if p_type == 1:  # PT_LOAD
+            loads.append((p_vaddr, p_filesz, p_offset))
+        elif p_type == 2 and dyn is None:  # PT_DYNAMIC
+            dyn = (p_offset, p_offset + p_filesz)
+
+    def v2o(v: int) -> int:
+        for va, fs, fo in loads:
+            if va <= v < va + fs:
+                return fo + (v - va)
+        raise ValueError(f"vaddr {v:#x} 不在任何 PT_LOAD 内")
+
+    strtab = None
+    needed_offs: list[int] = []
+    o, end = dyn
+    while o < end:
+        tag, val = struct.unpack_from("<QQ", data, o)
+        if tag == 0:
+            break
+        if tag == 1:
+            needed_offs.append(val)
+        elif tag == 5:
+            strtab = val
+        o += 16
     if strtab is None:
         raise ValueError("no DT_STRTAB")
+    strtab_off = v2o(strtab)
     out = []
     for v in needed_offs:
-        e = data.index(b"\x00", strtab + v)
-        out.append(data[strtab + v : e].decode())
+        e = data.index(b"\x00", strtab_off + v)
+        out.append(data[strtab_off + v : e].decode())
     return out
 
 
