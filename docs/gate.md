@@ -96,3 +96,30 @@
 - 判据: 1 ❌（check-wheel-tag 新增的 DT_NEEDED 断言拦截：空动态库 stub 无符号可解析，
   lld --as-needed 丢弃 NEEDED——断言按设计工作）
 - 结论与下一步: retag-wheel.py 集成 patchelf --add-needed 显式补记（RECORD 哈希同步）。
+
+### 2026-08-28 build-pydantic-core 全绿 + Pages 启用（判据 1/2/3 ✅）
+- run: https://github.com/strainhzj/android-wheels/actions/runs/33164701409（1036c57 起持续绿，
+  期间迭代修复详见决策记录与失败记录：cargo-ndk 安装方式 / maturin -i+extension-module /
+  空 libpython 动态 stub / --skip-auditwheel / retag+patchelf / ELF 解析修正）
+- 产物：pydantic_core-2.41.5-cp312-cp312-android_24_arm64_v8a.whl（约 1.9MB）、
+  android_24_x86_64.whl（约 2.1MB）；sdist sha256 强校验 OK（08daa51e…8476e）
+- 校验：check-wheel-tag 精确 tag + ELF machine + DT_NEEDED（libpython3.12.so，
+  Chaquopy 扩展形态断言）+ 扩展裸 .so 名 + RECORD 一致性
+- 索引：https://strainhzj.github.io/android-wheels/simple/pydantic-core/（HTTP 200，
+  sha256 fragment 附带；Pages 经 API 以 gh-pages 分支启用）
+- 判据: 1 ✅ 2 ✅ 3 ✅
+
+### 2026-08-28 import-matrix 阶段 1 全绿（判据 4 ✅）
+- run: https://github.com/strainhzj/android-wheels/actions/runs/33180505344（afb340e）
+- 链路：pip 自 Pages 索引解析安装自建 wheel → android-34 default x86_64 模拟器
+  （软件模拟冷启动约 8 分钟，boot-timeout 1800s）→ Python.start(AndroidPlatform) →
+  4/4 仪表测试通过（固定版本断言 / pydantic-core 原生 roundtrip / FastAPI
+  TestClient /health/live 200 / ABI 检查）；PAGESIZE=4096 留证
+- 迭代归因（详见各失败 run 记录）：Chaquopy DSL（options 传 --extra-index-url）、
+  abiFilters 两 ABI、useAndroidX、RECORD zip 一致性、Python.start 平台初始化、
+  emulator script 多行分组拆坏、API35 软件模拟下系统镜像 droid.bluetooth
+  SIGABRT（default/google_atd 双镜像复现、应用零痕迹，环境缺陷非 wheel 问题）
+- 判据: 4 ✅（模拟器 x86_64×API34）；arm64-v8a 导入验证待真机（Phase 5 设备矩阵）
+- 结论: **判据 1-4 达成；5（完整 import graph）与 6（16KB/冷启动/升级）为阶段 2
+  专项**——API35/16KB 使用 google_apis_ps16k 镜像与本地硬件加速 AVD 执行
+  （用户已批准 AVD 重建），不依赖 GitHub 软件模拟。闸门未全过，Phase 3 仍封锁。
