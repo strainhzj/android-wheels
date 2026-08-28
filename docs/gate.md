@@ -73,3 +73,11 @@
   请以 -i 指定；同时 sdist 无 [features] 表，需构建期 --features pyo3/extension-module
   防止扩展链接 libpython——Android 为嵌入式解释器，链接会在加载时产生双运行时）
 - 结论与下一步: 修 maturin 调用（-i 3.12 + extension-module），第四轮重试。
+
+### 2026-08-28 run 33164202997（失败）
+- run: https://github.com/strainhzj/android-wheels/actions/runs/33164202997
+- 变更: 1e76f64（maturin -i 3.12 + pyo3/extension-module）
+- 判据: 1 ❌（ld.lld: unable to find library -lpython3.12——maturin 生成的交叉
+  pyo3-config 仍使链接层请求 libpython；Android 嵌入式解释器无独立 libpython）
+- 结论与下一步: NDK llvm-ar 生成空静态档案 + RUSTFLAGS -L 注入（extension-module
+  模式不取符号，Py* 运行时由 Chaquopy 解释器解析），第五轮重试。
