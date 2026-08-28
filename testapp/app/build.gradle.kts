@@ -37,8 +37,10 @@ chaquopy {
         // Android 目标 Python（与 versions.env 的 CHAQUOPY_PYTHON_VERSION 一致）
         version = "3.12"
         pip {
-            // 本仓 GitHub Pages 索引：CI 以 -Pbtdeck.wheels.index=... 注入实际 owner
-            extraIndexUrls.add(
+            // 本仓 GitHub Pages 索引：CI 以 -Pbtdeck.wheels.index=... 注入实际 owner。
+            // Chaquopy 无 extraIndexUrls DSL 属性，pip 旗标统一经 options(...) 传
+            options(
+                "--extra-index-url",
                 providers.gradleProperty("btdeck.wheels.index")
                     .orElse("https://example.github.io/android-wheels/simple/")
                     .get()
