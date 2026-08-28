@@ -56,6 +56,9 @@ jobs:
           arch: x86_64
           target: default
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          # GitHub ubuntu runner 无 KVM（emulator 以 -accel off 纯软件模拟启动），
+          # 冷启动实测约 10-11 分钟，默认 600s 会超时（run 33166558591 实证）
+          emulator-boot-timeout: 1800
           script: |
             # 冒烟：确认系统与 page-size（API 35 镜像应为 16384，留证闸门判据 6）
             adb shell getprop ro.product.cpu.abi
