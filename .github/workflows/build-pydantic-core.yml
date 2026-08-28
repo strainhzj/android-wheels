@@ -22,11 +22,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Chaquopy 15.0.1 起 Python 3.12+ 不支持 32 位 ABI（armeabi-v7a/x86，
+        # 官方 changelog + 仓库 cp312 wheel 实测均只有 64 位），矩阵收敛为两 ABI
         include:
           - { abi: arm64-v8a,  target: aarch64-linux-android }
-          - { abi: armeabi-v7a, target: armv7-linux-androideabi }
-          - { abi: x86_64,      target: x86_64-linux-android }
-          - { abi: x86,         target: i686-linux-android }
+          - { abi: x86_64,     target: x86_64-linux-android }
     steps:
       - uses: actions/checkout@v4
 

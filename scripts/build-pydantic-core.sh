@@ -37,14 +37,27 @@ export "CARGO_TARGET_${TRIPLE_UPPER}_LINKER=${ANDROID_NDK_HOME}/toolchains/llvm/
 export PYO3_CROSS_PYTHON_VERSION="${CHAQUOPY_PYTHON_VERSION}"
 export PYO3_CROSS_PYTHON_IMPLEMENTATION=CPython
 
+# pydantic-core 无 abi3 Cargo feature（2.41.5 sdist 实查），按版本专属 wheel 构建；
+# PYO3_CROSS_PYTHON_VERSION 决定 cp312 tag，platform tag 经 retag 对齐 Chaquopy 形态
 maturin build --release \
     --target "${RUST_TARGET}" \
-    --abi3 "cp${CHAQUOPY_PYTHON_VERSION//./}" \
     --out "${REPO_DIR}/dist/${ANDROID_ABI}"
+
+# 2b) 重标为 Chaquopy 认可的 PEP 738 tag：cp312-cp312-android_<api>_<abi>
+TAG_KEY="ABI_${ANDROID_ABI//-/_}_TAG"
+TAG_VAL="${!TAG_KEY:-}"
+if [[ -z "${TAG_VAL}" || "${TAG_VAL}" == TBD* ]]; then
+    echo "::error::versions.env 未回填 ${TAG_KEY}（预期 android_<api>_<abi> 形态）"
+    exit 1
+fi
+python "${REPO_DIR}/scripts/retag-wheel.py" \
+    "${REPO_DIR}/dist/${ANDROID_ABI}/" "${ANDROID_ABI}" \
+    "${CHAQUOPY_PYTHON_VERSION}" "${TAG_VAL}"
 
 echo "==> wheel 产物："
 ls -l "${REPO_DIR}/dist/${ANDROID_ABI}/"
 
-# 3) wheel tag / ELF ABI 校验（Android platform tag 基线确认）
+# 3) wheel tag / ELF ABI 校验（精确匹配 versions.env 回填值）
+export ANDROID_WHEEL_TAG="${TAG_VAL}"
 python "${REPO_DIR}/scripts/check-wheel-tag.py" \
     "${REPO_DIR}/dist/${ANDROID_ABI}/" "${ANDROID_ABI}" "${CHAQUOPY_PYTHON_VERSION}"

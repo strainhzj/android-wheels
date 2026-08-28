@@ -43,12 +43,10 @@ def wheel_platform_ok(platform: str, abi: str) -> bool:
 
 
 def elf_machine(data: bytes) -> int:
+    # ELF64/32 头：e_ident[16] + e_type@16(u16) + e_machine@18(u16)
     if data[:4] != b"\x7fELF":
         raise ValueError("not an ELF file")
-    is_64 = data[4] == 2
-    little = data[5] == 1
-    fmt = "<Q" if is_64 else "<I"
-    return struct.unpack(fmt, data[16 : 16 + struct.calcsize(fmt)])[0]
+    return struct.unpack_from("<H", data, 18)[0]
 
 
 def main() -> int:
@@ -58,7 +56,10 @@ def main() -> int:
         print(f"FAIL: {dist_dir} 下没有 wheel")
         return 1
 
-    tag_pattern = re.compile(rf"^pydantic_core-[\d.]+.*-cp{py_version.replace('.', '')}-abi3-(.+)\.whl$")
+    # Chaquopy cp312 形态为 cp312-cp312（版本专属，见官方仓库 wheel 文件名）；
+    # abi3 形态保留兼容以防未来切换
+    v = py_version.replace(".", "")
+    tag_pattern = re.compile(rf"^pydantic_core-[\d.]+.*-cp{v}-(?:abi3|cp{v})-(.+)\.whl$")
     failures = []
     for wheel in wheels:
         m = tag_pattern.match(wheel.name)

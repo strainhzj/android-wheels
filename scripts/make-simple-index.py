@@ -20,7 +20,9 @@ PKG = "pydantic-core"
 
 
 def normalize(name: str) -> str:
-    return name.replace("-", "_").replace(".", "_").lower()
+    # PEP 503：URL 路径归一化把 [-_.] 连串替换为 "-"（连字符），pip 请求
+    # /simple/pydantic-core/；静态 Pages 无服务端归一化，目录名必须与之一致
+    return name.replace("_", "-").replace(".", "-").lower()
 
 
 def main() -> int:
