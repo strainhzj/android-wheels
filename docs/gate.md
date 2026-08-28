@@ -65,3 +65,11 @@
 - 变更: 53e18e0（cargo-ndk 改 cargo install；import-matrix 三处修正；AGP 8.7.3）
 - 判据: 1 ❌（maturin `--abi3` 参数不存在，四 job 挂"构建 wheel"）3-6 未执行
 - 结论与下一步: 见决策记录 #2/#3；随后提交 abi3 移除 + retag + 两 ABI 矩阵 + versions.env 回填。
+
+### 2026-08-28 run 33164038645（失败）
+- run: https://github.com/strainhzj/android-wheels/actions/runs/33164038645
+- 变更: bdb09d7（去 --abi3 + retag + 两 ABI + versions.env 回填）
+- 判据: 1 ❌（maturin 交叉模式不自动发现解释器：Couldn't find any python interpreters,
+  请以 -i 指定；同时 sdist 无 [features] 表，需构建期 --features pyo3/extension-module
+  防止扩展链接 libpython——Android 为嵌入式解释器，链接会在加载时产生双运行时）
+- 结论与下一步: 修 maturin 调用（-i 3.12 + extension-module），第四轮重试。

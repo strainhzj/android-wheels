@@ -38,9 +38,13 @@ export PYO3_CROSS_PYTHON_VERSION="${CHAQUOPY_PYTHON_VERSION}"
 export PYO3_CROSS_PYTHON_IMPLEMENTATION=CPython
 
 # pydantic-core 无 abi3 Cargo feature（2.41.5 sdist 实查），按版本专属 wheel 构建；
-# PYO3_CROSS_PYTHON_VERSION 决定 cp312 tag，platform tag 经 retag 对齐 Chaquopy 形态
+# -i 3.12：交叉模式下 maturin 不自动发现解释器，需显式给目标版本（run 33164038645 实证）；
+# --features pyo3/extension-module：Android 为嵌入式解释器，扩展不得链接 libpython
+#   （sdist Cargo.toml 无 [features] 表，官方构建同样在构建期启用该 feature）
 maturin build --release \
     --target "${RUST_TARGET}" \
+    -i "${CHAQUOPY_PYTHON_VERSION}" \
+    --features pyo3/extension-module \
     --out "${REPO_DIR}/dist/${ANDROID_ABI}"
 
 # 2b) 重标为 Chaquopy 认可的 PEP 738 tag：cp312-cp312-android_<api>_<abi>
