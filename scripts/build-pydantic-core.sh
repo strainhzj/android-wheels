@@ -41,15 +41,18 @@ export PYO3_CROSS_PYTHON_IMPLEMENTATION=CPython
 # -i 3.12：交叉模式下 maturin 不自动发现解释器，需显式给目标版本（run 33164038645 实证）；
 # --features pyo3/extension-module：Android 为嵌入式解释器，扩展不得链接 libpython
 #   （sdist Cargo.toml 无 [features] 表，官方构建同样在构建期启用该 feature）
-# pyo3 链接层在交叉配置下仍请求 -lpython3.12（run 33164202997 实证；Android 为
-# 嵌入式解释器，无独立 libpython 共享库可链）。提供空静态档案满足 -l 解析：
-# extension-module 模式不从档案取任何符号，Py* 符号保持未定义、由 Chaquopy
-# 运行时内嵌解释器解析。经 RUSTFLAGS -L 注入搜索路径（maturin 会在 cargo 调用
-# 中显式覆盖 PYO3_CONFIG_FILE/PYO3_CROSS_LIB_DIR，环境变量路线不可靠）。
+# pyo3 链接层在交叉配置下请求 -lpython3.12（run 33164202997 实证），而 Android 无
+# 独立 libpython 供链接。Chaquopy 官方扩展形态（bcrypt 解剖实证）：扩展 .so 的
+# DT_NEEDED 含 libpython3.12.so，Py 符号运行时由 Chaquopy 内嵌解释器解析。
+# 因此提供**空动态库** stub 满足 -l 解析并让链接器记录 DT_NEEDED（import-matrix
+# run 33167416177 仪表进程崩溃归因：无 NEEDED 声明时 bionic 无法解析未定义符号）。
+# 经 RUSTFLAGS -L 注入搜索路径（maturin 会显式覆盖 PYO3_CONFIG_FILE 等环境变量）。
 STUB_DIR="${REPO_DIR}/dist/.pyo3-stub"
 mkdir -p "${STUB_DIR}"
-"${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar" crs \
-    "${STUB_DIR}/libpython${CHAQUOPY_PYTHON_VERSION}.a"
+STUB_CC="${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin/clang"
+: > "${STUB_DIR}/empty.c"
+"${STUB_CC}" --target="${RUST_TARGET}${ANDROID_API_LEVEL}" -shared \
+    -o "${STUB_DIR}/libpython${CHAQUOPY_PYTHON_VERSION}.so" "${STUB_DIR}/empty.c"
 export RUSTFLAGS="-L ${STUB_DIR} ${RUSTFLAGS:-}"
 
 maturin build --release \

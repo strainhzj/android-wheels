@@ -63,7 +63,12 @@ jobs:
             # 冒烟：确认系统与 page-size（API 35 镜像应为 16384，留证闸门判据 6）
             adb shell getprop ro.product.cpu.abi
             adb shell getconf PAGESIZE
-            gradle :app:connectedDebugAndroidTest -p testapp "-Pbtdeck.wheels.index=$WHEELS_INDEX"
+            gradle :app:connectedDebugAndroidTest -p testapp "-Pbtdeck.wheels.index=$WHEELS_INDEX" || {
+              echo "==== connected test failed, dumping logcat (last 30k chars) ===="
+              adb logcat -d > "$HOME/logcat-failure.txt"
+              tail -c 30000 "$HOME/logcat-failure.txt" || true
+              exit 1
+            }
 
       - name: 完整 import graph（可选阶段 2）
         if: ${{ github.event.inputs.full-graph == 'true' }}

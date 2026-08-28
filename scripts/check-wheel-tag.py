@@ -49,6 +49,41 @@ def elf_machine(data: bytes) -> int:
     return struct.unpack_from("<H", data, 18)[0]
 
 
+def elf_dt_needed(data: bytes) -> list[str]:
+    # ELF64：PT_DYNAMIC → DT_NEEDED（tag=1），字符串经 DT_STRTAB（文件偏移）
+    if data[:4] != b"\x7fELF" or data[4] != 2:
+        raise ValueError("not an ELF64 file")
+    e_phoff = struct.unpack_from("<Q", data, 32)[0]
+    e_phentsize = struct.unpack_from("<H", data, 54)[0]
+    e_phnum = struct.unpack_from("<H", data, 56)[0]
+    dyn = strtab = None
+    needed_offs: list[int] = []
+    for i in range(e_phnum):
+        off = e_phoff + i * e_phentsize
+        if struct.unpack_from("<I", data, off)[0] != 2:  # PT_DYNAMIC
+            continue
+        p_offset = struct.unpack_from("<Q", data, off + 8)[0]
+        p_filesz = struct.unpack_from("<Q", data, off + 32)[0]
+        o, end = p_offset, p_offset + p_filesz
+        while o < end:
+            tag, val = struct.unpack_from("<QQ", data, o)
+            if tag == 0:
+                break
+            if tag == 1:
+                needed_offs.append(val)
+            elif tag == 5:
+                strtab = val
+            o += 16
+        break
+    if strtab is None:
+        raise ValueError("no DT_STRTAB")
+    out = []
+    for v in needed_offs:
+        e = data.index(b"\x00", strtab + v)
+        out.append(data[strtab + v : strtab + v + (e - strtab - v)].decode())
+    return out
+
+
 def main() -> int:
     dist_dir, abi, py_version = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
     wheels = sorted(dist_dir.glob("*.whl"))
@@ -60,11 +95,14 @@ def main() -> int:
     # abi3 形态保留兼容以防未来切换
     v = py_version.replace(".", "")
     tag_pattern = re.compile(rf"^pydantic_core-[\d.]+.*-cp{v}-(?:abi3|cp{v})-(.+)\.whl$")
+    # Chaquopy 官方扩展形态（bcrypt 解剖实证）：DT_NEEDED 含 libpython<ver>.so，
+    # 扩展 .so 为裸名（不带 cpython/abi3 后缀）
+    libpython = f"libpython{py_version}.so"
     failures = []
     for wheel in wheels:
         m = tag_pattern.match(wheel.name)
         if not m:
-            failures.append(f"{wheel.name}: 文件名不符合 cp{py_version.replace('.', '')}-abi3 结构")
+            failures.append(f"{wheel.name}: 文件名不符合 cp{v} 结构")
             continue
         platform = m.group(1)
         if not wheel_platform_ok(platform, abi):
@@ -76,9 +114,22 @@ def main() -> int:
             if not so_names:
                 failures.append(f"{wheel.name}: 缺少 native .so")
             for name in so_names:
-                machine = elf_machine(zf.read(name)[:64])
+                if re.search(r"\.(cpython-[\d]|abi3).*\.so$", name.rsplit("/", 1)[-1]):
+                    failures.append(f"{wheel.name}:{name}: 扩展 .so 应为裸名（Chaquopy 形态）")
+                data = zf.read(name)
+                machine = elf_machine(data[:64])
                 if machine != expected_machine:
                     failures.append(f"{wheel.name}:{name}: ELF machine {machine} != {desc}({expected_machine})")
+                    continue
+                try:
+                    needed = elf_dt_needed(data)
+                    if libpython not in needed:
+                        failures.append(
+                            f"{wheel.name}:{name}: DT_NEEDED 缺 {libpython}（实际 {needed}）"
+                            "——Chaquopy 扩展运行时经它解析 Py 符号"
+                        )
+                except ValueError as exc:
+                    failures.append(f"{wheel.name}:{name}: ELF 解析失败 {exc}")
 
         if failures:
             continue
