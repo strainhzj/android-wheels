@@ -16,7 +16,10 @@ if "${GRADLE_CMD[@]}"; then
   exit 0
 fi
 
-echo "==== connected test failed, dumping logcat (last 30k chars) ===="
-adb logcat -d > "$HOME/logcat-failure.txt"
-tail -c 30000 "$HOME/logcat-failure.txt" || true
+echo "==== connected test failed, dumping logcat ===="
+adb logcat -d -b crash > "$HOME/logcat-crash.txt" 2>/dev/null || true
+echo "---- crash buffer（最近 20k）----"
+tail -c 20000 "$HOME/logcat-crash.txt" || true
+echo "---- 应用相关行（btdeck/chaquopy/python/pydantic/linker/signal，最近 300 行）----"
+adb logcat -d | grep -iE "btdeck|chaquopy|pydantic|python|linker|SIGSEGV|SIGABRT|Fatal signal" | tail -n 300 || true
 exit 1
