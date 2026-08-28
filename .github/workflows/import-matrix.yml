@@ -33,8 +33,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        abi: [x86_64] # arm64-v8a 真机验证；armeabi-v7a/x86 无 API 34/35 模拟器镜像
-        api: [34, 35] # 代表设备；16KB page-size 校验依赖 API 35 模拟器镜像
+        abi: [x86_64] # arm64-v8a 真机验证；armeabi-v7a/x86 无 Python3.12 支持（Chaquopy 15.0.1 起）
+        # API 35：default 与 google_atd 镜像在 GitHub 软件模拟（-accel off）下均出现
+        # droid.bluetooth SIGABRT 系统级崩溃（run 33174886690/33177679622 多连复现、
+        # 应用零痕迹；API 34 同 wheel 全绿对照）。API 35 与 16KB page-size 验证转
+        # 判据 6 专项：google_apis_ps16k 镜像 + 本地硬件加速 AVD。
+        api: [34]
     env:
       WHEELS_INDEX: https://${{ github.repository_owner }}.github.io/android-wheels/simple/
     steps:
@@ -77,17 +81,11 @@ jobs:
           arch: x86_64
           # API 35 default 镜像在软件模拟下 droid.bluetooth SIGABRT 系统级崩溃
           # （run 33174886690 原跑+重跑两连崩、应用零痕迹），改用 CI 专用 ATD 镜像
-          target: ${{ matrix.api == 35 && 'google_atd' || 'default' }}
+          target: default
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
           # GitHub ubuntu runner 无 KVM（emulator 以 -accel off 纯软件模拟启动），
           # 冷启动实测约 10-11 分钟，默认 600s 会超时（run 33166558591 实证）
           emulator-boot-timeout: 1800
-          # 软件模拟下 CPU 过慢触发蓝牙栈看门狗 SIGABRT（ATD 镜像同样复现，
-          # run 33177679622），启动前直接关闭蓝牙硬件仿真
-          pre-emulator-launch-script: |
-            sed -i 's/hw.bluetooth *= *yes/hw.bluetooth = no/' \
-              "$HOME/.android/avd/test.avd/config.ini" || true
-            echo 'hw.bluetooth = no' >> "$HOME/.android/avd/test.avd/config.ini"
           script: bash scripts/emu-import-test.sh "$WHEELS_INDEX"
 
       - name: 完整 import graph（可选阶段 2）
