@@ -49,6 +49,21 @@ def elf_machine(data: bytes) -> int:
     return struct.unpack_from("<H", data, 18)[0]
 
 
+def elf_pt_load_aligns(data: bytes) -> list[int]:
+    # ELF64：遍历程序头，收集 PT_LOAD 的 p_align（@48）
+    if data[:4] != b"\x7fELF" or data[4] != 2:
+        raise ValueError("not an ELF64 file")
+    e_phoff = struct.unpack_from("<Q", data, 32)[0]
+    e_phentsize = struct.unpack_from("<H", data, 54)[0]
+    e_phnum = struct.unpack_from("<H", data, 56)[0]
+    out = []
+    for i in range(e_phnum):
+        off = e_phoff + i * e_phentsize
+        if struct.unpack_from("<I", data, off)[0] == 1:  # PT_LOAD
+            out.append(struct.unpack_from("<Q", data, off + 48)[0])
+    return out
+
+
 def elf_dt_needed(data: bytes) -> list[str]:
     # ELF64：PT_DYNAMIC → DT_NEEDED（tag=1）；DT_STRTAB 的 d_ptr 是虚拟地址，
     #须经 PT_LOAD 映射翻译成文件偏移（patchelf 重写后 vaddr≠offset）
@@ -137,6 +152,14 @@ def main() -> int:
                 if machine != expected_machine:
                     failures.append(f"{wheel.name}:{name}: ELF machine {machine} != {desc}({expected_machine})")
                     continue
+                # 16 KB page-size：所有 PT_LOAD 的 p_align 必须 ≥16384
+                # （ps16k 镜像实测 p_align=4096 的扩展 dlopen 即 SIGSEGV）
+                for align in elf_pt_load_aligns(data):
+                    if align < 16384:
+                        failures.append(
+                            f"{wheel.name}:{name}: PT_LOAD p_align={align} <16384"
+                            "——16KB page-size 设备不可加载"
+                        )
                 try:
                     needed = elf_dt_needed(data)
                     if libpython not in needed:

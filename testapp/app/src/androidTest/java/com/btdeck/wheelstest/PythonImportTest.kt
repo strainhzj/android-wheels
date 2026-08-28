@@ -57,6 +57,16 @@ class PythonImportTest {
     }
 
     @Test
+    fun httpxImport() {
+        assertEquals("ok", py().getModule("wheelcheck").callAttr("check_httpx_import").toString())
+    }
+
+    @Test
+    fun testclientImport() {
+        assertEquals("ok", py().getModule("wheelcheck").callAttr("check_testclient_import").toString())
+    }
+
+    @Test
     fun abiAndPageSize() {
         // 16 KB page-size 兼容性（Android 15+/API 35 镜像）留证
         val abi = android.os.Build.SUPPORTED_ABIS.firstOrNull()

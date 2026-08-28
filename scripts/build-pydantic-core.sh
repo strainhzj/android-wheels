@@ -53,7 +53,10 @@ STUB_CC="${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin/clang"
 : > "${STUB_DIR}/empty.c"
 "${STUB_CC}" --target="${RUST_TARGET}${ANDROID_API_LEVEL}" -shared \
     -o "${STUB_DIR}/libpython${CHAQUOPY_PYTHON_VERSION}.so" "${STUB_DIR}/empty.c"
-export RUSTFLAGS="-L ${STUB_DIR} ${RUSTFLAGS:-}"
+# -z max-page-size=16384：16 KB page-size 兼容（Android 15+ 16K 设备与 Play 要求）。
+# NDK r27 经 cargo-ndk/maturin 链路默认仍产出 p_align=4096（ps16k 镜像实测 dlopen
+# SIGSEGV，PT_LOAD 实查 4096）；check-wheel-tag 断言 p_align>=16384 防回归。
+export RUSTFLAGS="-L ${STUB_DIR} -C link-arg=-Wl,-z,max-page-size=16384 ${RUSTFLAGS:-}"
 
 maturin build --release \
     --target "${RUST_TARGET}" \
