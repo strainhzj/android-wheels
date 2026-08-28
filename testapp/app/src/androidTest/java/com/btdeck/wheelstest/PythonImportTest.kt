@@ -1,9 +1,12 @@
 package com.btdeck.wheelstest
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import com.chaquo.python.Python
+import com.chaquo.python.android.AndroidPlatform
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.BeforeClass
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -15,6 +18,19 @@ import org.junit.runner.RunWith
  */
 @RunWith(AndroidJUnit4::class)
 class PythonImportTest {
+
+    companion object {
+        /** Chaquopy 17 要求先 Python.start(AndroidPlatform)（run 33171733060 实证）。 */
+        @BeforeClass
+        @JvmStatic
+        fun startPython() {
+            if (!Python.isStarted()) {
+                Python.start(
+                    AndroidPlatform(InstrumentationRegistry.getInstrumentation().targetContext)
+                )
+            }
+        }
+    }
 
     private fun py() = Python.getInstance()
 
