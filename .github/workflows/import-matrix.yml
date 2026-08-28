@@ -75,7 +75,9 @@ jobs:
         with:
           api-level: ${{ matrix.api }}
           arch: x86_64
-          target: default
+          # API 35 default 镜像在软件模拟下 droid.bluetooth SIGABRT 系统级崩溃
+          # （run 33174886690 原跑+重跑两连崩、应用零痕迹），改用 CI 专用 ATD 镜像
+          target: ${{ matrix.api == 35 && 'google_atd' || 'default' }}
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
           # GitHub ubuntu runner 无 KVM（emulator 以 -accel off 纯软件模拟启动），
           # 冷启动实测约 10-11 分钟，默认 600s 会超时（run 33166558591 实证）
