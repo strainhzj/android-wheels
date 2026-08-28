@@ -51,7 +51,9 @@ jobs:
       - name: 安装构建工具（版本锁定）
         run: |
           source versions.env
-          pip install "maturin==1.8.2" "cargo-ndk==${CARGO_NDK_VERSION}" packaging
+          # cargo-ndk 只发布在 crates.io（PyPI 无此包，首建 run 33163185434 实证），经 cargo 安装
+          pip install "maturin==1.8.2" packaging
+          cargo install cargo-ndk --locked --version "${CARGO_NDK_VERSION}"
 
       - name: 构建 wheel
         run: bash scripts/build-pydantic-core.sh "${{ matrix.target }}" "${{ matrix.abi }}"

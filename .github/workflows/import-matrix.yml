@@ -1,9 +1,18 @@
 name: import-matrix
 
-# Phase 0B.4/0B.5：Chaquopy 真机/模拟器导入矩阵
+# Phase 0B.4/0B.5：Chaquopy 模拟器/真机导入矩阵
 # 阶段 1（默认）：最小 FastAPI + pydantic hello world
 # 阶段 2（full-graph=true 或手动触发）：BtDeck 完整 import graph +
 #   /health/live + 一次 Alembic 迁移 + 前端静态资源加载 + 16KB page-size
+#
+# 矩阵说明（2026-08-28 首建修正）：
+# - GitHub ubuntu runner 上仅有 x86_64 模拟器镜像可用（arm64-v8a/armeabi-v7a
+#   无 x86_64 宿主镜像，且 API 34/35 无 ARM 系统镜像）；CI 覆盖 x86_64 × API 34/35，
+#   arm64-v8a 导入验证由真实设备执行（gate.md 登记，对应闸门判据 4/5 的设备侧证据）。
+# - android-emulator-runner 在 step 结束时会关闭模拟器，因此
+#   connectedDebugAndroidTest 必须在其 script 块内执行，不能作为后续独立 step。
+# - 索引地址经 -Pbtdeck.wheels.index 注入（testapp/build.gradle.kts 读取的
+#   gradle 属性；写入 local.properties 的 chaquopy.extraIndexUrl 无人消费，已移除）。
 on:
   workflow_dispatch:
     inputs:
@@ -24,34 +33,34 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        abi: [arm64-v8a, x86_64]
+        abi: [x86_64] # arm64-v8a 真机验证；armeabi-v7a/x86 无 API 34/35 模拟器镜像
         api: [34, 35] # 代表设备；16KB page-size 校验依赖 API 35 模拟器镜像
+    env:
+      WHEELS_INDEX: https://${{ github.repository_owner }}.github.io/android-wheels/simple/
     steps:
       - uses: actions/checkout@v4
 
-      - name: 启动模拟器
+      # 仓库不带 gradlew wrapper（wrapper 二进制不入库），由 runner 侧安装 Gradle
+      - name: 安装 Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Gradle 构建 testapp（Chaquopy + 本仓索引，构建期即验证 wheel 解析）
+        run: gradle :app:assembleDebug -p testapp "-Pbtdeck.wheels.index=$WHEELS_INDEX"
+
+      - name: 启动模拟器并运行导入测试
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: ${{ matrix.api }}
-          arch: ${{ matrix.abi == 'arm64-v8a' && 'arm64-v8a' || 'x86_64' }}
+          arch: x86_64
           target: default
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
           script: |
-            # 冒烟：确认系统与 page-size
+            # 冒烟：确认系统与 page-size（API 35 镜像应为 16384，留证闸门判据 6）
             adb shell getprop ro.product.cpu.abi
             adb shell getconf PAGESIZE
-
-      - name: Gradle 构建 testapp（Chaquopy + 本仓索引）
-        run: |
-          cd testapp
-          echo "chaquopy.extraIndexUrl=https://${GITHUB_REPOSITORY_OWNER}.github.io/android-wheels/simple/" \
-            >> local.properties
-          ./gradlew :app:assembleDebug
-
-      - name: 安装并运行导入测试
-        run: |
-          cd testapp
-          ./gradlew :app:connectedDebugAndroidTest
+            gradle :app:connectedDebugAndroidTest -p testapp "-Pbtdeck.wheels.index=$WHEELS_INDEX"
 
       - name: 完整 import graph（可选阶段 2）
         if: ${{ github.event.inputs.full-graph == 'true' }}
