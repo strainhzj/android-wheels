@@ -82,6 +82,12 @@ jobs:
           # GitHub ubuntu runner 无 KVM（emulator 以 -accel off 纯软件模拟启动），
           # 冷启动实测约 10-11 分钟，默认 600s 会超时（run 33166558591 实证）
           emulator-boot-timeout: 1800
+          # 软件模拟下 CPU 过慢触发蓝牙栈看门狗 SIGABRT（ATD 镜像同样复现，
+          # run 33177679622），启动前直接关闭蓝牙硬件仿真
+          pre-emulator-launch-script: |
+            sed -i 's/hw.bluetooth *= *yes/hw.bluetooth = no/' \
+              "$HOME/.android/avd/test.avd/config.ini" || true
+            echo 'hw.bluetooth = no' >> "$HOME/.android/avd/test.avd/config.ini"
           script: bash scripts/emu-import-test.sh "$WHEELS_INDEX"
 
       - name: 完整 import graph（可选阶段 2）
