@@ -18,8 +18,10 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         ndk {
-            // 四 ABI 矩阵由 CI 的 -PabiOverride 或本处默认值控制
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86")
+            // Chaquopy 官方错误实证（import-matrix run 33165163903）：
+            // "Python 3.12 is not available for the ABI 'armeabi-v7a'.
+            //  Supported ABIs are [arm64-v8a, x86_64]."
+            abiFilters += listOf("arm64-v8a", "x86_64")
         }
     }
 
