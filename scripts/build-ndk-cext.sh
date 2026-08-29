@@ -58,6 +58,8 @@ make_wrapper() {
         echo '  if [ "$prev" = "-o" ]; then out="$a"; fi'
         echo '  prev="$a"'
         echo 'done'
+        # 诊断：完整 argv 回显（链接谜题归因用，稳定后可移除）
+        echo 'echo "WRAPPER-ARGV: ${args[*]}" >&2'
         echo 'if [[ "$out" == *.so && " ${args[*]} " != *" -shared "* ]]; then'
         echo '  exec "'"${real}"'" --target='"${RUST_TARGET}${ANDROID_API_LEVEL}"' -shared "${args[@]}"'
         echo 'fi'
