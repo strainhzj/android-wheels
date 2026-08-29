@@ -113,8 +113,21 @@ print(f"CROSS-STRIPPED {n} host-path injections")
 p.write_text(src, encoding="utf-8")
 SED
     # bionic 无 stderr 数据符号（宏 __stderr()）；Pillow C 源直接引用数据符号
-    # 在加载期 cannot locate（16K run 实证）——全部 .c/.h 替换为 __stderr()
-    grep -rl --include='*.c' --include='*.h' 'stderr' . | xargs -r sed -i 's/stderr/__stderr()/g'
+    # 在加载期 cannot locate（16K run 实证）。python 改写器跨平台确定并回显计数
+    # （shell 管道 sed 在 CI 上未生效一轮，改此形态确证）
+    python3 - <<'PYS'
+import re
+from pathlib import Path
+total = 0
+for p in Path(".").rglob("*"):
+    if p.suffix in (".c", ".h") and p.is_file():
+        text = p.read_text(encoding="utf-8", errors="surrogateescape")
+        new_text, n = re.sub(r"stderr", "__stderr()", text)
+        if n:
+            p.write_text(new_text, encoding="utf-8", errors="surrogateescape")
+            total += n
+print(f"STDERR-REPLACED {total}")
+PYS
     # Pillow 11 的 jpeg 默认强制依赖；经其自定义后端的 config-settings 禁用全部
     # 可选特性、仅留 zlib（NDK sysroot 自带 zlib.h/libz；PNG 即 qrcode 场景所需），
     # 并关平台猜测。官方 wheel 链私有 libjpeg_chaquopy.so 在 16K 镜像找不到——
