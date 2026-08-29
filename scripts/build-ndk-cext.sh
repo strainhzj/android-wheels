@@ -50,11 +50,26 @@ export CXXFLAGS="-I${SYSROOT}/usr/include/${RUST_TARGET} -I${SYSROOT}/usr/includ
 export LDFLAGS="-Wl,-z,max-page-size=16384"
 
 if [[ "${PKG}" == "pillow" ]]; then
+    # 外科手术：platform-guessing=disable 只护住平台猜测段，"standard locations"
+    # 段独立注入 /usr/include（run 实证 -I 仍在）——直接摘除注入行
+    python3 - <<'SED'
+import re, pathlib
+p = pathlib.Path("setup.py")
+src = p.read_text(encoding="utf-8")
+for bad in [
+    '_add_directory(library_dirs, "/usr/local/lib")',
+    '_add_directory(include_dirs, "/usr/local/include")',
+    '_add_directory(library_dirs, "/usr/lib")',
+    '_add_directory(include_dirs, "/usr/include")',
+]:
+    src = src.replace(bad, f"pass  # CROSS-STRIPPED: {bad}")
+p.write_text(src, encoding="utf-8")
+SED
     # Pillow 11 的 jpeg 默认强制依赖；经其自定义后端的 config-settings 禁用全部
     # 可选特性、仅留 zlib（NDK sysroot 自带 zlib.h/libz；PNG 即 qrcode 场景所需），
-    # 并关平台猜测（否则注入宿主 /usr/include 等 glibc 路径与 NDK sysroot 冲突）。
-    # 官方 wheel 链私有 libjpeg_chaquopy.so 在 16K 镜像找不到——自建静态化规避。
-    # 其自定义构建后端在隔离环境会丢交叉 CC 链路，故 --no-build-isolation。
+    # 并关平台猜测。官方 wheel 链私有 libjpeg_chaquopy.so 在 16K 镜像找不到——
+    # 自建静态化规避。其自定义构建后端在隔离环境会丢交叉 CC 链路，
+    # 故 --no-build-isolation。
     PIP_CONFIG_FLAGS=(
         -C jpeg=disable -C jpeg2000=disable -C tiff=disable
         -C freetype=disable -C lcms=disable -C webp=disable -C xcb=disable
