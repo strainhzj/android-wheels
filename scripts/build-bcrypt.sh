@@ -44,16 +44,12 @@ for PYV in "${CHAQUOPY_PYTHON_VERSION}" "3.8"; do
 done
 export RUSTFLAGS="-L ${STUB_DIR} -C link-arg=-Wl,-z,max-page-size=16384 ${RUSTFLAGS:-}"
 
-# bcrypt sdist 的 Cargo.toml 位于 src/_bcrypt/（不在根目录），需显式 manifest-path；
-# pyo3 声明 abi3 无最低版本（官方 wheel 即 cp37/39-abi3 形态），补 abi3-py38
-# （extension-module 已在其 default features）
-maturin build --release \
-    --manifest-path src/_bcrypt/Cargo.toml \
-    --target "${RUST_TARGET}" \
-    -i "${CHAQUOPY_PYTHON_VERSION}" \
-    --features pyo3/abi3-py38 \
-    --skip-auditwheel \
-    --out "${REPO_DIR}/dist/${ANDROID_ABI}"
+# bcrypt 的构建后端是 setuptools-rust（pyproject [[tool.setuptools-rust.ext-modules]]，
+# py-limited-api=auto 即 abi3 形态）——maturin 直调会误取 Cargo 元数据产出
+# bcrypt_rust-0.1.0（run 实证）；改 pip wheel 走原生后端，交叉经 CARGO_BUILD_TARGET
+# 与 PYO3_CROSS_* 环境传递（setuptools-rust 会透传给 cargo/pyo3）。
+export CARGO_BUILD_TARGET="${RUST_TARGET}"
+pip wheel --no-deps -w "${REPO_DIR}/dist/${ANDROID_ABI}" .
 
 # 3) 重标 + 校验（tag/裸 so/DT_NEEDED/16KB 对齐）
 TAG_KEY="ABI_${ANDROID_ABI//-/_}_TAG"
