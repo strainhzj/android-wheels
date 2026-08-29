@@ -59,10 +59,6 @@ make_wrapper "${REAL_CC}" "${WRAP_DIR}/cc"
 make_wrapper "${REAL_CXX}" "${WRAP_DIR}/cxx"
 export CC="${WRAP_DIR}/cc"
 export CXX="${WRAP_DIR}/cxx"
-# distutils 链接 .so 用 LDSHARED（宿主值含 x86 gcc + --fix-cortex-a53 旗标），
-# 一并指向 wrapper（clang 驱动 shared 链接等价）
-export LDSHARED="${WRAP_DIR}/cc"
-export LDCXXSHARED="${WRAP_DIR}/cxx"
 export AR="${TOOLCHAIN}/llvm-ar"
 export LD="${TOOLCHAIN}/ld"
 export STRIP="${TOOLCHAIN}/llvm-strip"
@@ -77,6 +73,11 @@ export CXXFLAGS="-I${SYSROOT}/usr/include/${RUST_TARGET} -I${SYSROOT}/usr/includ
 export LDFLAGS="-Wl,-z,max-page-size=16384"
 
 if [[ "${PKG}" == "pillow" ]]; then
+    # pillow 自定义后端的 .so 链接显式走宿主 LDSHARED（x86 gcc + --fix-cortex
+    # 旗标，arm64 挂点）——指到 wrapper 的 clang；其余包链接经 CC/CXX 派生，
+    # 全局覆盖会破坏其可执行特性探测（undefined symbol: main，run 实证）
+    export LDSHARED="${WRAP_DIR}/cc"
+    export LDCXXSHARED="${WRAP_DIR}/cxx"
     # 外科手术：摘除 setup.py 中全部绝对路径的 include/library 注入
     # （sdist 与 git tag 文本有差异，精确串不可靠；/usr/include 的 glibc 头
     # 与 NDK sysroot 冲突是唯一致命项，运行实证 platform-guessing 只护一段）
