@@ -32,7 +32,7 @@ DST = TESTAPP / "app" / "src" / "fullgraph"
 # 登记于 docs/gate.md（后续增强：自建 wheel 收窄差集）。
 ANDROID_OVERRIDES: dict[str, str] = {
     "pillow": "pillow==11.0.0",              # 后端 ~=11.1.0；官方 android_24 有 11.0.0
-    "bcrypt": "bcrypt==3.2.2",               # 后端 ~=5.0.0；官方 cp312 有 3.2.2（算法兼容）
+    # bcrypt 已自建 5.0.0（android-wheels 仓）——与后端 ~=5.0.0 pin 对齐，无需覆写
     "pycryptodomex": "pycryptodomex==3.21.0",  # 后端 ~=3.23.0；官方 android_24 有 3.21.0
     "regex": "regex==2023.10.3",             # 后端 >=2024.11.6；官方 cp312 有 2023.10.3
 }

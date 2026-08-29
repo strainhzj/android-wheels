@@ -117,6 +117,7 @@ def elf_dt_needed(data: bytes) -> list[str]:
 
 def main() -> int:
     dist_dir, abi, py_version = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+    pkg = (sys.argv[4] if len(sys.argv) > 4 else "pydantic-core").replace("-", "_")
     wheels = sorted(dist_dir.glob("*.whl"))
     if not wheels:
         print(f"FAIL: {dist_dir} 下没有 wheel")
@@ -125,7 +126,7 @@ def main() -> int:
     # Chaquopy cp312 形态为 cp312-cp312（版本专属，见官方仓库 wheel 文件名）；
     # abi3 形态保留兼容以防未来切换
     v = py_version.replace(".", "")
-    tag_pattern = re.compile(rf"^pydantic_core-[\d.]+.*-cp{v}-(?:abi3|cp{v})-(.+)\.whl$")
+    tag_pattern = re.compile(rf"^{re.escape(pkg)}-[\d.]+.*-cp{v}-(?:abi3|cp{v})-(.+)\.whl$")
     # Chaquopy 官方扩展形态（bcrypt 解剖实证）：DT_NEEDED 含 libpython<ver>.so，
     # 扩展 .so 为裸名（不带 cpython/abi3 后缀）
     libpython = f"libpython{py_version}.so"
@@ -133,7 +134,7 @@ def main() -> int:
     for wheel in wheels:
         m = tag_pattern.match(wheel.name)
         if not m:
-            failures.append(f"{wheel.name}: 文件名不符合 cp{v} 结构")
+            failures.append(f"{wheel.name}: 文件名不符合 {pkg} cp{v} 结构")
             continue
         platform = m.group(1)
         if not wheel_platform_ok(platform, abi):

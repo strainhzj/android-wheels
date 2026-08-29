@@ -17,7 +17,7 @@ env:
 
 jobs:
   build:
-    name: ${{ matrix.abi }}
+    name: ${{ matrix.pkg }}-${{ matrix.abi }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -25,8 +25,11 @@ jobs:
         # Chaquopy 15.0.1 起 Python 3.12+ 不支持 32 位 ABI（armeabi-v7a/x86，
         # 官方 changelog + 仓库 cp312 wheel 实测均只有 64 位），矩阵收敛为两 ABI
         include:
-          - { abi: arm64-v8a,  target: aarch64-linux-android }
-          - { abi: x86_64,     target: x86_64-linux-android }
+          - { pkg: pydantic-core, abi: arm64-v8a,  target: aarch64-linux-android }
+          - { pkg: pydantic-core, abi: x86_64,     target: x86_64-linux-android }
+          # bcrypt：官方仓库存量 3.2.2 在 Android15 16K 镜像 dlopen 失败，自建 5.0.0
+          - { pkg: bcrypt,        abi: arm64-v8a,  target: aarch64-linux-android }
+          - { pkg: bcrypt,        abi: x86_64,     target: x86_64-linux-android }
     steps:
       - uses: actions/checkout@v4
 
@@ -57,14 +60,14 @@ jobs:
           cargo install cargo-ndk --locked --version "${CARGO_NDK_VERSION}"
 
       - name: 构建 wheel
-        run: bash scripts/build-pydantic-core.sh "${{ matrix.target }}" "${{ matrix.abi }}"
+        run: bash "scripts/build-${{ matrix.pkg }}.sh" "${{ matrix.target }}" "${{ matrix.abi }}"
 
       - name: 记录 sdist hash（首次运行后回填 versions.env）
         run: sha256sum pydantic_core-*.tar.gz || true
 
       - uses: actions/upload-artifact@v4
         with:
-          name: wheel-${{ matrix.abi }}
+          name: wheel-${{ matrix.pkg }}-${{ matrix.abi }}
           path: dist/${{ matrix.abi }}/*.whl
           if-no-files-found: error
 
