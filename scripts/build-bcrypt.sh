@@ -31,13 +31,17 @@ export "CARGO_TARGET_${TRIPLE_UPPER}_LINKER=${ANDROID_NDK_HOME}/toolchains/llvm/
 export PYO3_CROSS_PYTHON_VERSION="${CHAQUOPY_PYTHON_VERSION}"
 export PYO3_CROSS_PYTHON_IMPLEMENTATION=CPython
 
-# 空 libpython 动态库 stub（同 pydantic-core：DT_NEEDED 记录 + 16KB 对齐）
+# 空 libpython 动态库 stub（同 pydantic-core：DT_NEEDED 记录 + 16KB 对齐）。
+# abi3-py38 构建会请求 -lpython3.8，一并 stub 供链接解析；最终 NEEDED 由
+# retag-wheel 统一改写为 libpython3.12.so（运行时仅 Chaquopy 3.12 存在）
 STUB_DIR="${REPO_DIR}/dist/.pyo3-stub"
 mkdir -p "${STUB_DIR}"
 STUB_CC="${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin/clang"
 : > "${STUB_DIR}/empty.c"
-"${STUB_CC}" --target="${RUST_TARGET}${ANDROID_API_LEVEL}" -shared \
-    -o "${STUB_DIR}/libpython${CHAQUOPY_PYTHON_VERSION}.so" "${STUB_DIR}/empty.c"
+for PYV in "${CHAQUOPY_PYTHON_VERSION}" "3.8"; do
+    "${STUB_CC}" --target="${RUST_TARGET}${ANDROID_API_LEVEL}" -shared \
+        -o "${STUB_DIR}/libpython${PYV}.so" "${STUB_DIR}/empty.c"
+done
 export RUSTFLAGS="-L ${STUB_DIR} -C link-arg=-Wl,-z,max-page-size=16384 ${RUSTFLAGS:-}"
 
 # bcrypt sdist 的 Cargo.toml 位于 src/_bcrypt/（不在根目录），需显式 manifest-path；

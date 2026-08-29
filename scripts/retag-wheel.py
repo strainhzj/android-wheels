@@ -137,6 +137,10 @@ def main() -> int:
                 )
                 ok_needed = all(
                     libpython in elf_dt_needed(zf.read(n))
+                    and not any(
+                        x.startswith("libpython3.") and x != libpython
+                        for x in elf_dt_needed(zf.read(n))
+                    )
                     for n in zf.namelist() if n.endswith(".so")
                 )
             if ok_form and ok_needed:
@@ -170,20 +174,41 @@ def main() -> int:
                     new_path = (so.rsplit("/", 1)[0] + "/" + bare) if "/" in so else bare
                 new_data = None
                 try:
-                    needed_missing = libpython not in elf_dt_needed(data)
+                    needed = elf_dt_needed(data)
                 except ValueError:
-                    needed_missing = True  # 异常形态（无动态段等）→ 交 patchelf 处理
-                if needed_missing:
+                    needed = None  # 异常形态（无动态段等）→ 交 patchelf 处理
+                # 目标 NEEDED = 仅 libpython<目标版本>.so：
+                # - abi3 构建（如 bcrypt pyo3/abi3-py38）会记录 libpython3.8.so，
+                #   运行时仅存在 Chaquopy 的目标版本 → 移除错误项 + 补目标项
+                wrong = [
+                    n for n in (needed or [])
+                    if n.startswith("libpython3.") and n.endswith(".so") and n != libpython
+                ]
+                if needed is None or wrong or libpython not in needed:
                     try:
-                        new_data = patchelf_add_needed(data, libpython)
+                        # patchelf 不支持 stdin，经临时文件逐项 remove/add
+                        with tempfile.TemporaryDirectory() as td:
+                            so_f = Path(td) / "lib.so"
+                            so_f.write_bytes(data)
+                            for w in wrong:
+                                subprocess.run(
+                                    ["patchelf", "--remove-needed", w, str(so_f)],
+                                    check=True, capture_output=True,
+                                )
+                            if libpython not in elf_dt_needed(so_f.read_bytes()):
+                                subprocess.run(
+                                    ["patchelf", "--add-needed", libpython, str(so_f)],
+                                    check=True, capture_output=True,
+                                )
+                            new_data = so_f.read_bytes()
                     except FileNotFoundError:
                         failures.append(
-                            f"{wheel.name}:{so}: DT_NEEDED 缺 {libpython} 且本机无 patchelf"
+                            f"{wheel.name}:{so}: DT_NEEDED 需修补但本机无 patchelf"
                             "（CI 由 pip install patchelf 提供）"
                         )
                         continue
-                    except subprocess.CalledProcessError as exc:
-                        failures.append(f"{wheel.name}:{so}: patchelf 失败 {exc.stderr!r}")
+                    except (subprocess.CalledProcessError, ValueError) as exc:
+                        failures.append(f"{wheel.name}:{so}: patchelf 失败 {exc!r}")
                         continue
                 if new_path or new_data is not None:
                     so_updates[so] = (new_path, new_data)
