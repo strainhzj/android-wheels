@@ -32,7 +32,12 @@ DST = TESTAPP / "app" / "src" / "fullgraph"
 # 登记于 docs/gate.md（后续增强：自建 wheel 收窄差集）。
 # 已自建对齐后端 pin（android-wheels 仓索引，无需覆写）：bcrypt 5.0.0、
 # greenlet 3.0.1、regex 2024.11.6、pycryptodomex 3.23.0。
-ANDROID_OVERRIDES: dict[str, str] = {}
+ANDROID_OVERRIDES: dict[str, str] = {
+    # pillow：x86_64 有自建 11.1.0（索引优先解析高版本）；arm64 自建链接谜题
+    # 未破（continue-on-error 隔离），回落官方 11.0.0——arm64 真机 16KB 验证
+    # 属 Phase 5 设备矩阵，届时攻破
+    "pillow": "pillow>=11.0.0,<12",
+}
 
 
 def copytree_clean(src: Path, dst: Path) -> int:
