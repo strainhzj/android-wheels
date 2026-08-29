@@ -46,6 +46,7 @@ make_wrapper() {
         echo 'for a in "$@"; do'
         echo '  case "$a" in'
         echo '    -I/usr/include|-I/usr/local/include|-I/usr/include/x86_64-linux-gnu) ;;'
+        echo '    --fix-cortex-a53-843419|-Wl,--fix-cortex-a53-843419) ;;'
         echo '    *) args+=("$a");;'
         echo '  esac'
         echo 'done'
