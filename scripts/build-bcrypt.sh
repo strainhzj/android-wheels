@@ -40,12 +40,14 @@ STUB_CC="${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin/clang"
     -o "${STUB_DIR}/libpython${CHAQUOPY_PYTHON_VERSION}.so" "${STUB_DIR}/empty.c"
 export RUSTFLAGS="-L ${STUB_DIR} -C link-arg=-Wl,-z,max-page-size=16384 ${RUSTFLAGS:-}"
 
-# bcrypt sdist 的 Cargo.toml 位于 src/_bcrypt/（不在根目录），需显式 manifest-path
+# bcrypt sdist 的 Cargo.toml 位于 src/_bcrypt/（不在根目录），需显式 manifest-path；
+# pyo3 声明 abi3 无最低版本（官方 wheel 即 cp37/39-abi3 形态），补 abi3-py38
+# （extension-module 已在其 default features）
 maturin build --release \
     --manifest-path src/_bcrypt/Cargo.toml \
     --target "${RUST_TARGET}" \
     -i "${CHAQUOPY_PYTHON_VERSION}" \
-    --features pyo3/extension-module \
+    --features pyo3/abi3-py38 \
     --skip-auditwheel \
     --out "${REPO_DIR}/dist/${ANDROID_ABI}"
 
