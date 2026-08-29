@@ -45,7 +45,19 @@ export CFLAGS="-Wl,-z,max-page-size=16384"
 export CXXFLAGS="-Wl,-z,max-page-size=16384"
 export LDFLAGS="-Wl,-z,max-page-size=16384"
 
-pip wheel --no-deps -w "${REPO_DIR}/dist/${ANDROID_ABI}" .
+if [[ "${PKG}" == "pillow" ]]; then
+    # Pillow 11 的 jpeg 默认强制依赖；经其自定义后端的 config-settings 禁用全部
+    # 可选特性、仅留 zlib（NDK sysroot 自带 zlib.h/libz；PNG 即 qrcode 场景所需）。
+    # 官方 wheel 链私有 libjpeg_chaquopy.so 在 16K 镜像找不到——自建静态化规避。
+    PIP_CONFIG_FLAGS=(
+        -C jpeg=disable -C jpeg2000=disable -C tiff=disable
+        -C freetype=disable -C lcms=disable -C webp=disable -C xcb=disable
+    )
+else
+    PIP_CONFIG_FLAGS=()
+fi
+
+pip wheel --no-deps "${PIP_CONFIG_FLAGS[@]}" -w "${REPO_DIR}/dist/${ANDROID_ABI}" .
 
 # 重标 + 校验（c-ext 模式）
 TAG_KEY="ABI_${ANDROID_ABI//-/_}_TAG"
