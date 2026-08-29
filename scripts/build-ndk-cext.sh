@@ -43,13 +43,17 @@ make_wrapper() {
     {
         echo '#!/bin/bash'
         echo 'args=()'
+        echo 'prev=""'
         echo 'for a in "$@"; do'
         echo '  case "$a" in'
         echo '    -I/usr/include|-I/usr/local/include|-I/usr/include/x86_64-linux-gnu) ;;'
         echo '    --fix-cortex-a53-843419|-Wl,--fix-cortex-a53-843419) ;;'
         echo '    -m64|-m32|-march=*|-mtune=*) ;;'
+        echo '    /usr/include|/usr/local/include|/usr/include/x86_64-linux-gnu)'
+        echo '      if [ "$prev" = "-I" ] || [ "$prev" = "-L" ]; then ;; else args+=("$a"); fi ;;'
         echo '    *) args+=("$a");;'
         echo '  esac'
+        echo '  prev="$a"'
         echo 'done'
         # 输出为 .so 时确保 -shared（宿主 LDSHARED 自带而 wrapper 透传丢失；
         # 缺失时 lld 按可执行链 → undefined symbol: main/PyModule_Create2）
