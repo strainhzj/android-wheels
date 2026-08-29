@@ -47,13 +47,14 @@ export LDFLAGS="-Wl,-z,max-page-size=16384"
 
 if [[ "${PKG}" == "pillow" ]]; then
     # Pillow 11 的 jpeg 默认强制依赖；经其自定义后端的 config-settings 禁用全部
-    # 可选特性、仅留 zlib（NDK sysroot 自带 zlib.h/libz；PNG 即 qrcode 场景所需）。
+    # 可选特性、仅留 zlib（NDK sysroot 自带 zlib.h/libz；PNG 即 qrcode 场景所需），
+    # 并关平台猜测（否则注入宿主 /usr/include 等 glibc 路径与 NDK sysroot 冲突）。
     # 官方 wheel 链私有 libjpeg_chaquopy.so 在 16K 镜像找不到——自建静态化规避。
-    # 其自定义构建后端在隔离环境会丢交叉 CC 链路（误用宿主 glibc 头实证），
-    # 故 --no-build-isolation 在外层环境构建。
+    # 其自定义构建后端在隔离环境会丢交叉 CC 链路，故 --no-build-isolation。
     PIP_CONFIG_FLAGS=(
         -C jpeg=disable -C jpeg2000=disable -C tiff=disable
         -C freetype=disable -C lcms=disable -C webp=disable -C xcb=disable
+        -C platform-guessing=disable
         --no-build-isolation
     )
     pip install -q setuptools wheel
