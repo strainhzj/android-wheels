@@ -63,7 +63,7 @@ chaquopy {
                     // 自建 x86_64 wheel 本地候选（索引版本竞争会被官方同代胜出，
                     // find-links 直连文件候选参与最高版本裁决）；arm64 无本地候选
                     // 自然回落官方——pillow-arm64 链接谜题攻破后移除
-                    options("--find-links", rootProject.file("extra-wheels/local").absolutePath)
+                    options("--find-links", File(rootProject.projectDir, "../extra-wheels/local").absolutePath)
                 } else {
                     throw GradleException("btdeck.fullgraph=true 但缺 ${req}——先运行 scripts/stage-fullgraph.py")
                 }
