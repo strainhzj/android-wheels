@@ -108,6 +108,34 @@ def patchelf_add_needed(data: bytes, libname: str) -> bytes:
         return so.read_bytes()
 
 
+# Linux 惯例名 → Android 系统库真名（NDK sysroot 链接产出 .so.1 形态）
+ANDROID_NEEDED_RENAME = {
+    "libz.so.1": "libz.so",
+}
+
+
+def patchelf_rename_needed(data: bytes) -> bytes | None:
+    """把 NEEDED 中的 Linux 惯例名改成 Android 真名（如有）。"""
+    try:
+        needed = elf_dt_needed(data)
+    except ValueError:
+        return None
+    renames = [(a, b) for a, b in ANDROID_NEEDED_RENAME.items() if a in needed]
+    if not renames:
+        return None
+    import subprocess as _sp
+    import tempfile as _tf
+    with _tf.TemporaryDirectory() as td:
+        so_f = Path(td) / "lib.so"
+        so_f.write_bytes(data)
+        for old_n, new_n in renames:
+            _sp.run(
+                ["patchelf", "--replace-needed", old_n, new_n, str(so_f)],
+                check=True, capture_output=True,
+            )
+        return so_f.read_bytes()
+
+
 def main() -> int:
     dist_dir = Path(sys.argv[1])
     abi = sys.argv[2]
@@ -175,9 +203,9 @@ def main() -> int:
                 bare = mm.group("base") + ".so"
                 if base != bare:
                     new_path = (so.rsplit("/", 1)[0] + "/" + bare) if "/" in so else bare
-                new_data = None
+                new_data = patchelf_rename_needed(data)
                 try:
-                    needed = elf_dt_needed(data)
+                    needed = elf_dt_needed(new_data if new_data is not None else data)
                 except ValueError:
                     needed = None  # 异常形态（无动态段等）→ 交 patchelf 处理
                 # 注意：c-ext 与 rust 一致地需要 DT_NEEDED libpython——Chaquopy 的
@@ -192,7 +220,7 @@ def main() -> int:
                         # patchelf 不支持 stdin，经临时文件逐项 remove/add
                         with tempfile.TemporaryDirectory() as td:
                             so_f = Path(td) / "lib.so"
-                            so_f.write_bytes(data)
+                            so_f.write_bytes(new_data if new_data is not None else data)
                             for w in wrong:
                                 subprocess.run(
                                     ["patchelf", "--remove-needed", w, str(so_f)],
