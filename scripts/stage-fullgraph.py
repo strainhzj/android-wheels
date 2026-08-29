@@ -30,11 +30,10 @@ DST = TESTAPP / "app" / "src" / "fullgraph"
 # Android 版本覆写：Chaquopy 官方仓库 cp312 现有 Android wheel 的版本。
 # 后端 pin 与官方仓库存量的差集；闸门判据 5 以可安装可运行为准，版本对齐度
 # 登记于 docs/gate.md（后续增强：自建 wheel 收窄差集）。
+# 已自建对齐后端 pin（android-wheels 仓索引，无需覆写）：bcrypt 5.0.0、
+# greenlet 3.0.1、regex 2024.11.6、pycryptodomex 3.23.0。
 ANDROID_OVERRIDES: dict[str, str] = {
     "pillow": "pillow==11.0.0",              # 后端 ~=11.1.0；官方 android_24 有 11.0.0
-    # bcrypt 已自建 5.0.0（android-wheels 仓）——与后端 ~=5.0.0 pin 对齐，无需覆写
-    "pycryptodomex": "pycryptodomex==3.21.0",  # 后端 ~=3.23.0；官方 android_24 有 3.21.0
-    "regex": "regex==2023.10.3",             # 后端 >=2024.11.6；官方 cp312 有 2023.10.3
 }
 
 

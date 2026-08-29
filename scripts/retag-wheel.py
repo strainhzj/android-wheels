@@ -180,13 +180,14 @@ def main() -> int:
                     needed = elf_dt_needed(data)
                 except ValueError:
                     needed = None  # 异常形态（无动态段等）→ 交 patchelf 处理
-                if mode == "c-ext":
-                    needed = None  # c-ext 模式：不修补 NEEDED（标准扩展不链 libpython）
+                # 注意：c-ext 与 rust 一致地需要 DT_NEEDED libpython——Chaquopy 的
+                # libpython 非 RTLD_GLOBAL，无 NEEDED 则重定位失败（_Py_NoneStruct
+                # cannot locate，16K run 实证）；官方 bcrypt 链 libpython 同因
                 wrong = [
                     n for n in (needed or [])
                     if n.startswith("libpython3.") and n.endswith(".so") and n != libpython
                 ]
-                if mode != "c-ext" and (needed is None or wrong or libpython not in needed):
+                if needed is None or wrong or libpython not in needed:
                     try:
                         # patchelf 不支持 stdin，经临时文件逐项 remove/add
                         with tempfile.TemporaryDirectory() as td:

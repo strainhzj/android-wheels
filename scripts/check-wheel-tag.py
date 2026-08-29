@@ -166,7 +166,7 @@ def main() -> int:
                         )
                 try:
                     needed = elf_dt_needed(data)
-                    if mode == "rust" and libpython not in needed:
+                    if libpython not in needed:
                         failures.append(
                             f"{wheel.name}:{name}: DT_NEEDED 缺 {libpython}（实际 {needed}）"
                             "——Chaquopy 扩展运行时经它解析 Py 符号"
