@@ -30,6 +30,13 @@ jobs:
           # bcrypt：官方仓库存量 3.2.2 在 Android15 16K 镜像 dlopen 失败，自建 5.0.0
           - { pkg: bcrypt,        abi: arm64-v8a,  target: aarch64-linux-android }
           - { pkg: bcrypt,        abi: x86_64,     target: x86_64-linux-android }
+          # setuptools 系 C/C++ 扩展：官方仓库存量 wheel 同因 16K 不可载，自建对齐后端 pin
+          - { pkg: greenlet,      abi: arm64-v8a,  target: aarch64-linux-android }
+          - { pkg: greenlet,      abi: x86_64,     target: x86_64-linux-android }
+          - { pkg: regex,         abi: arm64-v8a,  target: aarch64-linux-android }
+          - { pkg: regex,         abi: x86_64,     target: x86_64-linux-android }
+          - { pkg: pycryptodomex, abi: arm64-v8a,  target: aarch64-linux-android }
+          - { pkg: pycryptodomex, abi: x86_64,     target: x86_64-linux-android }
     steps:
       - uses: actions/checkout@v4
 
@@ -41,6 +48,7 @@ jobs:
           python-version: "3.12"
 
       - uses: dtolnay/rust-toolchain@stable
+        if: ${{ matrix.pkg == 'pydantic-core' || matrix.pkg == 'bcrypt' }}
         with:
           targets: ${{ matrix.target }}
 
@@ -54,13 +62,21 @@ jobs:
       - name: 安装构建工具（版本锁定）
         run: |
           source versions.env
-          # cargo-ndk 只发布在 crates.io（PyPI 无此包，首建 run 33163185434 实证），经 cargo 安装；
-          # patchelf 用于给扩展 .so 补 DT_NEEDED libpython3.12.so（lld --as-needed 会丢弃空 stub 的 NEEDED）
           pip install "maturin==1.8.2" packaging patchelf
-          cargo install cargo-ndk --locked --version "${CARGO_NDK_VERSION}"
+          if [[ "${{ matrix.pkg }}" == "pydantic-core" || "${{ matrix.pkg }}" == "bcrypt" ]]; then
+            # cargo-ndk 只发布在 crates.io（PyPI 无此包，首建 run 33163185434 实证），经 cargo 安装；
+            # patchelf 用于给扩展 .so 补 DT_NEEDED libpython3.12.so（lld --as-needed 会丢弃空 stub 的 NEEDED）
+            cargo install cargo-ndk --locked --version "${CARGO_NDK_VERSION}"
+          fi
 
       - name: 构建 wheel
-        run: bash "scripts/build-${{ matrix.pkg }}.sh" "${{ matrix.target }}" "${{ matrix.abi }}"
+        run: |
+          case "${{ matrix.pkg }}" in
+            pydantic-core|bcrypt)
+              bash "scripts/build-${{ matrix.pkg }}.sh" "${{ matrix.target }}" "${{ matrix.abi }}" ;;
+            *)
+              bash scripts/build-ndk-cext.sh "${{ matrix.pkg }}" "${{ matrix.target }}" "${{ matrix.abi }}" ;;
+          esac
 
       - name: 记录 sdist hash（首次运行后回填 versions.env）
         run: sha256sum pydantic_core-*.tar.gz || true

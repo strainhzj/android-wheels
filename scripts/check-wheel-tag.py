@@ -118,6 +118,9 @@ def elf_dt_needed(data: bytes) -> list[str]:
 def main() -> int:
     dist_dir, abi, py_version = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
     pkg = (sys.argv[4] if len(sys.argv) > 4 else "pydantic-core").replace("-", "_")
+    # 模式：rust（pyo3 系，强制 DT_NEEDED libpython——Chaquopy 扩展形态）/
+    #       c-ext（setuptools 系，CPython 扩展标准形态不链 libpython，跳过该断言）
+    mode = sys.argv[5] if len(sys.argv) > 5 else "rust"
     wheels = sorted(dist_dir.glob("*.whl"))
     if not wheels:
         print(f"FAIL: {dist_dir} 下没有 wheel")
@@ -163,7 +166,7 @@ def main() -> int:
                         )
                 try:
                     needed = elf_dt_needed(data)
-                    if libpython not in needed:
+                    if mode == "rust" and libpython not in needed:
                         failures.append(
                             f"{wheel.name}:{name}: DT_NEEDED 缺 {libpython}（实际 {needed}）"
                             "——Chaquopy 扩展运行时经它解析 Py 符号"

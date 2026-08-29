@@ -114,6 +114,9 @@ def main() -> int:
     py_tag = f"cp{sys.argv[3].replace('.', '')}"
     expected_platform = sys.argv[4]
     libpython = f"libpython{sys.argv[3]}.so"
+    # 模式：rust（pyo3 系，修补 NEEDED 至 libpython）/ c-ext（setuptools 系，
+    # 标准扩展不链 libpython，跳过 NEEDED 修补）
+    mode = sys.argv[5] if len(sys.argv) > 5 else "rust"
     so_ext_pattern = re.compile(r"^(?P<base>.+?)(?:\.cpython-[\d]+[^/]*|\.abi3)?\.so$")
 
     wheels = sorted(dist_dir.glob("*.whl"))
@@ -177,14 +180,13 @@ def main() -> int:
                     needed = elf_dt_needed(data)
                 except ValueError:
                     needed = None  # 异常形态（无动态段等）→ 交 patchelf 处理
-                # 目标 NEEDED = 仅 libpython<目标版本>.so：
-                # - abi3 构建（如 bcrypt pyo3/abi3-py38）会记录 libpython3.8.so，
-                #   运行时仅存在 Chaquopy 的目标版本 → 移除错误项 + 补目标项
+                if mode == "c-ext":
+                    needed = None  # c-ext 模式：不修补 NEEDED（标准扩展不链 libpython）
                 wrong = [
                     n for n in (needed or [])
                     if n.startswith("libpython3.") and n.endswith(".so") and n != libpython
                 ]
-                if needed is None or wrong or libpython not in needed:
+                if mode != "c-ext" and (needed is None or wrong or libpython not in needed):
                     try:
                         # patchelf 不支持 stdin，经临时文件逐项 remove/add
                         with tempfile.TemporaryDirectory() as td:
