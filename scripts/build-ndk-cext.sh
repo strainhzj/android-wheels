@@ -50,7 +50,7 @@ make_wrapper() {
         echo '    --fix-cortex-a53-843419|-Wl,--fix-cortex-a53-843419) ;;'
         echo '    -m64|-m32|-march=*|-mtune=*) ;;'
         echo '    /usr/include|/usr/local/include|/usr/include/x86_64-linux-gnu)'
-        echo '      if [ "$prev" = "-I" ] || [ "$prev" = "-L" ]; then ;; else args+=("$a"); fi ;;'
+        echo '      if [ "$prev" != "-I" ] && [ "$prev" != "-L" ]; then args+=("$a"); fi ;;'
         echo '    *) args+=("$a");;'
         echo '  esac'
         echo '  prev="$a"'
