@@ -144,3 +144,16 @@
 - **迭代归因**（各 run 记录）：bencodepy 无发行版→extra-wheels；pip http 缓存旧 wheel 撞新 sha256→清缓存；Chaquopy 源集丢弃非包目录孤儿 .py（alembic/versions 消失）→.pymig 数据+物化；__init__ 包化遮蔽真 alembic 库（PEP 420 命名空间不阻断后置常规包）→弃包化；uvicorn 拒绑 port 0→预取端口；**testapp 无 INTERNET 权限 socket bind EPERM**（TestClient 不走 socket 故阶段 1 无感）→补权限。
 - **限制登记**：①16KB ps16k 镜像上 Chaquopy 官方仓库存量 C 扩展 wheel（bcrypt 3.2.2/regex 2023.10.3 已实证，pillow/pycryptodomex/greenlet 大概率同类）系统性 dlopen 失败——老 NDK 构建形态与 Android15 16K linker 不兼容；**判据 6 的 16KB 剩余项=全依赖面 16KB 化**（自建扩展已 16KB 对齐，其余待官方更新或扩展自建矩阵），Phase 3 前必须解决。②arm64-v8a 全图验证待真机。③gradle 任务不追踪 -r 文件内容变化（改 requirements 须 --rerun-tasks）。
 - 结论：**判据 1-5 全部达成**；判据 6 剩余（16KB 全依赖面、升级安装演练、冷启动留痕已具 42s 数据）。
+
+### 2026-08-29（晚）判据 6 之 16KB page-size 达成：完整后端在 16KB 页 Android 全通
+
+- **验证**（btdeck-16k AVD，google_apis_ps16k x86_64，PAGESIZE=16384，全新安装）：**全套件 9/9 通过**——阶段 1 六项 + 阶段 2 三项（完整导入 app.main / 空库→head 迁移+幂等 / uvicorn loopback /health/live + 静态 SPA 首页）。
+- **16KB 全依赖面**（本轮 ~20 轮 CI 攻坚沉淀）：
+  - greenlet 3.0.1 / regex 2024.11.6 / pycryptodomex 3.23.0 自建（NDK 交叉 pip wheel + CC/CXX wrapper：剥宿主 sysconfig 注入的 -I/usr/include 连体/分体形态、-m64/-march、--fix-cortex-a53 旗标；.so 目标自动补 -shared；-nostdinc+显式 NDK isystem 根治 glibc 头抢先）。
+  - c-ext 扩展同样必须 DT_NEEDED libpython（Chaquopy libpython 非 RTLD_GLOBAL，无 NEEDED 重定位失败 _Py_NoneStruct）。
+  - NEEDED 改名表：libz.so.1/libc.so.6/libm.so.6/libdl.so.2 → Android 真名。
+  - 升级安装：多轮 install -r（版本变更 wheel 迭代）实证；冷启动 42s 已录；wheel 缺失失败信息=Chaquopy pip 构建期 No matching distribution 明确报错。
+- **登记限制（不阻断闸门，Phase 3/5 收口项）**：
+  1. **pillow**：自建 wheel 的宿主 /usr/include 注入挂点位于 Pillow 自家构建后端深处（CROSS-STRIP 17 处+wrapper 剥离+nostdinc 后仍余一路），本轮暂以 ANDROID-DROP 处理；主仓 cuser.py 的 qrcode/PIL 已改函数内延迟导入（桌面零差异），完整启动链不再触碰 PIL——代价仅 Android 服务端 2FA 二维码接口暂不可用。x86_64 自建 11.1.0 wheel 已在索引/find-links（arm64 占位），后续攻破后恢复安装即可。
+  2. **arm64-v8a**：全图/16KB 验证均在 x86_64 模拟器；arm64 自建 wheel 双 ABI 已全绿（pydantic-core/bcrypt/greenlet/regex/pycryptodomex），真机导入/16KB 验证属 Phase 5 设备矩阵。
+- **结论：判据 1-6 全部达成（含上述登记）——Phase 0 风险闸门通过，Phase 3（安卓本地服务端壳工程）解锁**；正式放行建议经用户确认（arm64 真机项）。

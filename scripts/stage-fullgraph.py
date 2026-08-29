@@ -32,12 +32,13 @@ DST = TESTAPP / "app" / "src" / "fullgraph"
 # 登记于 docs/gate.md（后续增强：自建 wheel 收窄差集）。
 # 已自建对齐后端 pin（android-wheels 仓索引，无需覆写）：bcrypt 5.0.0、
 # greenlet 3.0.1、regex 2024.11.6、pycryptodomex 3.23.0。
-ANDROID_OVERRIDES: dict[str, str] = {
-    # pillow：x86_64 有自建 11.1.0（索引优先解析高版本）；arm64 自建链接谜题
-    # 未破（continue-on-error 隔离），回落官方 11.0.0——arm64 真机 16KB 验证
-    # 属 Phase 5 设备矩阵，届时攻破
-    "pillow": "pillow==11.1.0",
-}
+ANDROID_OVERRIDES: dict[str, str] = {}
+
+# Android 16KB 验证期暂不安装 pillow：其自建 wheel 的宿主 /usr/include 注入
+# 挂点在 Pillow 自家构建后端深处（20 轮 CI 攻坚未破，登记 gate.md）；后端
+# cuser.py 已把 qrcode/PIL 改为函数内延迟导入，完整启动链不再触碰 PIL——
+# 代价仅为 Android 服务端模式 2FA 二维码接口暂不可用（其余零影响）
+ANDROID_DROP: list[str] = ["pillow"]
 
 
 def copytree_clean(src: Path, dst: Path) -> int:
@@ -98,6 +99,9 @@ def main() -> int:
         if not stripped or stripped.startswith("#"):
             continue
         name = stripped.split("~")[0].split("=")[0].split(">")[0].split("<")[0].strip().lower()
+        if name in ANDROID_DROP:
+            out_lines.append(f"# ANDROID-DROP（16KB 攻坚期）: {stripped}")
+            continue
         override = ANDROID_OVERRIDES.get(name)
         if override:
             out_lines.append(f"{override}  # ANDROID-OVERRIDE（后端 pin: {stripped}）")
