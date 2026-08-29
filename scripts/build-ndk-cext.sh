@@ -47,6 +47,7 @@ make_wrapper() {
         echo '  case "$a" in'
         echo '    -I/usr/include|-I/usr/local/include|-I/usr/include/x86_64-linux-gnu) ;;'
         echo '    --fix-cortex-a53-843419|-Wl,--fix-cortex-a53-843419) ;;'
+        echo '    -m64|-m32|-march=*|-mtune=*) ;;'
         echo '    *) args+=("$a");;'
         echo '  esac'
         echo 'done'
@@ -58,9 +59,9 @@ make_wrapper() {
         echo '  prev="$a"'
         echo 'done'
         echo 'if [[ "$out" == *.so && " ${args[*]} " != *" -shared "* ]]; then'
-        echo '  exec "'"${real}"'" -shared "${args[@]}"'
+        echo '  exec "'"${real}"'" --target='"${RUST_TARGET}${ANDROID_API_LEVEL}"' -shared "${args[@]}"'
         echo 'fi'
-        echo "exec '${real}' "'"${args[@]}"'
+        echo "exec '${real}' --target=${RUST_TARGET}${ANDROID_API_LEVEL} "'"${args[@]}"'
     } > "${out}"
     chmod +x "${out}"
 }
