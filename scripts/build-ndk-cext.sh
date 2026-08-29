@@ -50,19 +50,20 @@ export CXXFLAGS="-I${SYSROOT}/usr/include/${RUST_TARGET} -I${SYSROOT}/usr/includ
 export LDFLAGS="-Wl,-z,max-page-size=16384"
 
 if [[ "${PKG}" == "pillow" ]]; then
-    # 外科手术：platform-guessing=disable 只护住平台猜测段，"standard locations"
-    # 段独立注入 /usr/include（run 实证 -I 仍在）——直接摘除注入行
+    # 外科手术：摘除 setup.py 中全部绝对路径的 include/library 注入
+    # （sdist 与 git tag 文本有差异，精确串不可靠；/usr/include 的 glibc 头
+    # 与 NDK sysroot 冲突是唯一致命项，运行实证 platform-guessing 只护一段）
     python3 - <<'SED'
 import re, pathlib
 p = pathlib.Path("setup.py")
 src = p.read_text(encoding="utf-8")
-for bad in [
-    '_add_directory(library_dirs, "/usr/local/lib")',
-    '_add_directory(include_dirs, "/usr/local/include")',
-    '_add_directory(library_dirs, "/usr/lib")',
-    '_add_directory(include_dirs, "/usr/include")',
-]:
-    src = src.replace(bad, f"pass  # CROSS-STRIPPED: {bad}")
+pattern = re.compile(
+    r'(?m)^\s*_add_directory\((include_dirs|library_dirs), "/[^"]*"\)\s*$'
+)
+src, n = pattern.subn(
+    lambda m: f"pass  # CROSS-STRIPPED ({m.group(1)})", src
+)
+print(f"CROSS-STRIPPED {n} host-path injections")
 p.write_text(src, encoding="utf-8")
 SED
     # Pillow 11 的 jpeg 默认强制依赖；经其自定义后端的 config-settings 禁用全部
