@@ -1,6 +1,6 @@
 # build metadata
-date: 2026-08-29T03:44:18Z
-commit: a9caf912769914595c77d547aefbb94aa4530773
+date: 2026-08-29T05:01:57Z
+commit: 48c41bf2cb23be6670c9c1eabafa8fd182b234f8
 # 固定版本清单（单一来源）——任何改动走 PR 并更新 docs/gate.md 的决策记录
 # 2026-08-28 首建修正（详见 docs/gate.md 决策记录）：
 #   - cargo-ndk 不在 PyPI，经 cargo install 安装；
@@ -17,6 +17,14 @@ PYDANTIC_CORE_SDIST_SHA256=08daa51ea16ad373ffd5e7606252cc32f07bc72b28284b6bc9c6d
 # bcrypt（官方仓库存量 3.2.2 在 Android15 16K 镜像 dlopen 失败，自建 5.0.0 对齐后端 pin）
 BCRYPT_VERSION=5.0.0
 BCRYPT_SDIST_SHA256=f748f7c2d6fd375cc93d3fba7ef4a9e3a092421b8dbf34d8d4dc06be9492dfdd
+
+# setuptools 系 C/C++ 扩展自建（官方仓库存量 wheel 在 Android15 16K 镜像不可载）
+GREENLET_VERSION=3.0.1
+GREENLET_SDIST_SHA256=816bd9488a94cba78d93e1abb58000e8266fa9cc2aa9ccdd6eb0696acb24005b
+REGEX_VERSION=2024.11.6
+REGEX_SDIST_SHA256=7ab159b063c52a0333c884e4679f8d7a85112ee3078fe3d9004b2dd875585519
+PYCRYPTODOMEX_VERSION=3.23.0
+PYCRYPTODOMEX_SDIST_SHA256=71909758f010c82bc99b0abf4ea12012c98962fbf0583c2164f8b84533c2e4da
 
 # Python（Android）
 CHAQUOPY_PYTHON_VERSION=3.12
