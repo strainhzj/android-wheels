@@ -37,6 +37,9 @@ jobs:
           - { pkg: regex,         abi: x86_64,     target: x86_64-linux-android }
           - { pkg: pycryptodomex, abi: arm64-v8a,  target: aarch64-linux-android }
           - { pkg: pycryptodomex, abi: x86_64,     target: x86_64-linux-android }
+          # pillow：官方 wheel 链私有 libjpeg_chaquopy.so 在 16K 镜像找不到——自建（zlib 走 NDK sysroot，无 jpeg 头自动禁用 JPEG）
+          - { pkg: pillow,        abi: arm64-v8a,  target: aarch64-linux-android }
+          - { pkg: pillow,        abi: x86_64,     target: x86_64-linux-android }
     steps:
       - uses: actions/checkout@v4
 
