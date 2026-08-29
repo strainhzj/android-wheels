@@ -59,6 +59,10 @@ make_wrapper "${REAL_CC}" "${WRAP_DIR}/cc"
 make_wrapper "${REAL_CXX}" "${WRAP_DIR}/cxx"
 export CC="${WRAP_DIR}/cc"
 export CXX="${WRAP_DIR}/cxx"
+# distutils 链接 .so 用 LDSHARED（宿主值含 x86 gcc + --fix-cortex-a53 旗标），
+# 一并指向 wrapper（clang 驱动 shared 链接等价）
+export LDSHARED="${WRAP_DIR}/cc"
+export LDCXXSHARED="${WRAP_DIR}/cxx"
 export AR="${TOOLCHAIN}/llvm-ar"
 export LD="${TOOLCHAIN}/ld"
 export STRIP="${TOOLCHAIN}/llvm-strip"
