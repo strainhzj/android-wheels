@@ -40,9 +40,13 @@ export AR="${TOOLCHAIN}/llvm-ar"
 export LD="${TOOLCHAIN}/ld"
 export STRIP="${TOOLCHAIN}/llvm-strip"
 export READELF="${TOOLCHAIN}/llvm-readelf"
-# 16KB 对齐 + 允许未定义符号（扩展形态）
-export CFLAGS="-Wl,-z,max-page-size=16384"
-export CXXFLAGS="-Wl,-z,max-page-size=16384"
+# 16KB 对齐 + 允许未定义符号（扩展形态）；
+# 前置 NDK sysroot include：宿主 Python sysconfig 会注入 -I/usr/include 等
+# glibc 路径（platform-guessing=disable 也拦不住，pillow run 实证），
+# 让 NDK 的 stdlib.h 等先行命中即可绕开 bits/* 冲突（-I 按命令序生效）
+SYSROOT="${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+export CFLAGS="-I${SYSROOT}/usr/include/${RUST_TARGET} -I${SYSROOT}/usr/include -Wl,-z,max-page-size=16384"
+export CXXFLAGS="-I${SYSROOT}/usr/include/${RUST_TARGET} -I${SYSROOT}/usr/include -Wl,-z,max-page-size=16384"
 export LDFLAGS="-Wl,-z,max-page-size=16384"
 
 if [[ "${PKG}" == "pillow" ]]; then
