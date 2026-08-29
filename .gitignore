@@ -5,3 +5,6 @@ public/
 build/
 local.properties
 __pycache__/
+
+# fullgraph staging 产物（scripts/stage-fullgraph.py 生成）
+testapp/app/src/fullgraph/

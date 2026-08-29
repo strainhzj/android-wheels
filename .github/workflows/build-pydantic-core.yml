@@ -81,6 +81,9 @@ jobs:
           path: dist
           merge-multiple: true
 
+      # extra-wheels/：纯 Python sdist-only 依赖的预构建 wheel（见目录内 README）
+      - run: cp extra-wheels/*.whl dist/
+
       - run: python scripts/make-simple-index.py dist public
 
       - name: 生成 SBOM 与构建元数据

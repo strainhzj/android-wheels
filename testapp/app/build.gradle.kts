@@ -54,10 +54,26 @@ chaquopy {
             install("uvicorn==0.35.0")
             // wheelcheck.check_fastapi_app 的 TestClient 依赖
             install("httpx==0.28.0")
+            // 阶段 2（闸门判据 5）：BtDeck 完整 import graph——
+            // 先 python scripts/stage-fullgraph.py，再 -Pbtdeck.fullgraph=true 构建
+            if (providers.gradleProperty("btdeck.fullgraph").getOrElse("") == "true") {
+                val req = rootProject.file("app/src/fullgraph/fullgraph-requirements.txt")
+                if (req.exists()) {
+                    options("-r", req.absolutePath)
+                } else {
+                    throw GradleException("btdeck.fullgraph=true 但缺 ${req}——先运行 scripts/stage-fullgraph.py")
+                }
+            }
         }
     }
     productFlavors { }
-    sourceSets { }
+    sourceSets {
+        getByName("main") {
+            if (providers.gradleProperty("btdeck.fullgraph").getOrElse("") == "true") {
+                srcDir("src/fullgraph/python")
+            }
+        }
+    }
 }
 
 dependencies {
