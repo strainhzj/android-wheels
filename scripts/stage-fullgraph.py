@@ -76,6 +76,13 @@ def main() -> int:
     n_app = copytree_clean(backend / "app", py_dst / "app")
     n_alembic = copytree_clean(backend / "alembic", py_dst / "alembic")
     shutil.copy2(backend / "alembic.ini", py_dst / "alembic.ini")
+    # Chaquopy 源集会丢弃非包目录中的孤儿 .py（alembic/versions 整目录实证消失，
+    # 而 frontend/dist 非 py 数据全量幸存）。加 __init__.py 成包又会遮蔽
+    # requirements 里的真 alembic 库（run 实证 cannot import name 'command'）。
+    # 方案：迁移脚本以 .pymig 数据扩展名打包（数据不被丢、目录保持命名空间形态
+    # 不遮蔽真包——PEP 420 命名空间不阻断后置常规包），bootstrap 首跑物化回 .py。
+    for f in (py_dst / "alembic").rglob("*.py"):
+        f.rename(f.with_name(f.name + ".pymig"))
     n_dist = copytree_clean(frontend_dist, py_dst / "frontend" / "dist")
     shutil.copy2(REPO / "scripts" / "fullgraph_bootstrap.py", py_dst / "fullgraph_bootstrap.py")
 
@@ -94,6 +101,9 @@ def main() -> int:
             out_lines.append(f"{override}  # ANDROID-OVERRIDE（后端 pin: {stripped}）")
         else:
             out_lines.append(stripped)
+    # Android 无系统 tz 数据库（zoneinfo 报 No time zone found with key GMT，
+    # run 实证调度器启动失败）——tzdata 纯 Python 包是嵌入式标准补法（Phase 3 依赖）
+    out_lines.append("tzdata>=2024.1  # ANDROID-ADD：Android 无系统 tz 数据库")
     (DST / "fullgraph-requirements.txt").write_text("\n".join(out_lines) + "\n", encoding="utf-8")
 
     print(f"staged: app {n_app} 文件 / alembic {n_alembic} 文件 / frontend dist {n_dist} 文件")

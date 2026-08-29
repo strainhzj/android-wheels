@@ -135,3 +135,12 @@
 - **附带发现**：fastapi.testclient 深导入链在主线程默认栈上于 Python 递归限触发前耗尽 C 栈（ps16k 每帧更大）→ 测试侧以 16MB 大栈线程执行（testapp wheelcheck._run_on_big_stack）；**Phase 3 深导入图（BtDeck app.main）必须沿用此技法**。
 - **判据 6 剩余**：冷启动计时留痕（16K 首启 42s 已录）、wheel 缺失失败信息（Chaquopy pip 构建期报错形态已具备）；完整"升级安装"演练随阶段 2 资源注入后的 testapp 版本化再做。
 - 结论：**判据 6 之 16KB 核心达成**（wheel 双页大小验证）；判据 5 仍待阶段 2 实装。
+
+### 2026-08-29 判据 5 达成：BtDeck 完整 import graph（阶段 2 实装，4096 x86_64 AVD）
+
+- **实装**：`scripts/stage-fullgraph.py`（backend/app + alembic + alembic.ini + frontend/dist → testapp gitignored 源集；`.pymig` 数据形态 + bootstrap 运行期物化）、`scripts/fullgraph_bootstrap.py`（大栈线程/环境锚定/三项判据）、`FullGraphTest.kt`（assume-skip）、gradle `-Pbtdeck.fullgraph=true` 接线。路径锚定零后端改动（ROOT_PATH 派生同时命中 migration 绝对锚定与 factory 候选 3）。
+- **验证**（btdeck-a35 AVD，android-35 google_apis x86_64，PAGESIZE=4096）：**9/9 全测试通过**——判据 5a 完整导入（app.main 全链 265 文件）、5b 迁移（空库→head 全链 + 幂等重跑 + alembic_version/建表断言）、5c 服务（uvicorn loopback：lifespan 完整初始化——调度器/三 lane runtime/仪表盘任务，/health/live 200 alive、/ 静态 SPA 首页 200）。
+- **依赖解析矩阵**：56 包全部可装。自建：pydantic-core 2.41.5、bcrypt 5.0.0（官方 3.2.2 在 Android15 16K 镜像 dlopen 失败 DT_HASH 形态，自建后与后端 pin 对齐消覆写；bcrypt 走 setuptools-rust 原生后端——maturin 会误取 Cargo 元数据 bcrypt_rust-0.1.0）；extra-wheels：bencodepy 0.9.5（sdist-only+distutils 构建失败，预构建通用 wheel）；版本覆写 3 处（pillow 11.0.0/pycryptodomex 3.21.0/regex 2023.10.3，官方仓库存量）；ANDROID-ADD：tzdata（Android 无系统 tz 数据库，否则调度器 'No time zone found GMT' 启动失败——Phase 3 必备）。
+- **迭代归因**（各 run 记录）：bencodepy 无发行版→extra-wheels；pip http 缓存旧 wheel 撞新 sha256→清缓存；Chaquopy 源集丢弃非包目录孤儿 .py（alembic/versions 消失）→.pymig 数据+物化；__init__ 包化遮蔽真 alembic 库（PEP 420 命名空间不阻断后置常规包）→弃包化；uvicorn 拒绑 port 0→预取端口；**testapp 无 INTERNET 权限 socket bind EPERM**（TestClient 不走 socket 故阶段 1 无感）→补权限。
+- **限制登记**：①16KB ps16k 镜像上 Chaquopy 官方仓库存量 C 扩展 wheel（bcrypt 3.2.2/regex 2023.10.3 已实证，pillow/pycryptodomex/greenlet 大概率同类）系统性 dlopen 失败——老 NDK 构建形态与 Android15 16K linker 不兼容；**判据 6 的 16KB 剩余项=全依赖面 16KB 化**（自建扩展已 16KB 对齐，其余待官方更新或扩展自建矩阵），Phase 3 前必须解决。②arm64-v8a 全图验证待真机。③gradle 任务不追踪 -r 文件内容变化（改 requirements 须 --rerun-tasks）。
+- 结论：**判据 1-5 全部达成**；判据 6 剩余（16KB 全依赖面、升级安装演练、冷启动留痕已具 42s 数据）。

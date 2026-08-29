@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- loopback 服务端判据（uvicorn bind 127.0.0.1）需要 INTERNET；
+         无此权限 socket bind 直接 EPERM（run 实证） -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <application
         android:label="BtDeck Wheels Test"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">

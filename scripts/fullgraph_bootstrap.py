@@ -19,7 +19,19 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 
 
+def _materialize_alembic() -> None:
+    """把以 .pymig 数据形态打包的迁移脚本还原为 .py（AssetFinder 目录可写）。"""
+    alembic_dir = ROOT / "alembic"
+    if not alembic_dir.is_dir():
+        return
+    for f in alembic_dir.rglob("*.pymig"):
+        target = f.with_suffix("")
+        if not target.exists():
+            target.write_bytes(f.read_bytes())
+
+
 def _prepare_env() -> Path:
+    _materialize_alembic()
     base = ROOT.parent / "btdeck-test"
     (base / "config").mkdir(parents=True, exist_ok=True)
     (base / "torrents").mkdir(parents=True, exist_ok=True)
@@ -89,10 +101,18 @@ def check_server() -> str:
         _prepare_env()
         import uvicorn
 
+        # uvicorn 在 Android 上拒绑 port=0（could not bind 实证）；先以普通 socket
+        # 从内核取一个空闲端口再关闭，交给 uvicorn 以具体端口绑定
+        import socket as _socket
+        _probe = _socket.socket()
+        _probe.bind(("127.0.0.1", 0))
+        free_port = _probe.getsockname()[1]
+        _probe.close()
         config = uvicorn.Config(
-            "app.main:app", host="127.0.0.1", port=18080, log_level="warning"
+            "app.main:app", host="127.0.0.1", port=free_port, log_level="warning"
         )
         server = uvicorn.Server(config)
+        server.config.port = free_port  # 保证回读一致
         t = threading.Thread(target=server.run, daemon=True, name="btdeck-uvicorn")
         threading.stack_size(16 * 1024 * 1024)
         t.start()
@@ -100,13 +120,20 @@ def check_server() -> str:
         import httpx
         live = index = None
         last_error: Exception | None = None
+        port = None
         for _ in range(120):  # 服务+迁移+首启初始化最长 120s
             if not t.is_alive():
-                raise RuntimeError("uvicorn 线程提前退出")
+                raise RuntimeError(f"uvicorn 线程提前退出: {last_error}")
+            if port is None and getattr(server, "servers", None):
+                sock = server.servers[0].sockets[0]
+                port = sock.getsockname()[1]
+            if port is None:
+                time.sleep(1)
+                continue
             try:
-                live = httpx.get("http://127.0.0.1:18080/health/live", timeout=5)
+                live = httpx.get(f"http://127.0.0.1:{port}/health/live", timeout=5)
                 if live.status_code == 200:
-                    index = httpx.get("http://127.0.0.1:18080/", timeout=10)
+                    index = httpx.get(f"http://127.0.0.1:{port}/", timeout=10)
                     break
             except Exception as exc:  # noqa: BLE001
                 last_error = exc
