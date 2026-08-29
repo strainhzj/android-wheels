@@ -33,9 +33,31 @@ echo "${PKG_SHA}  ${SDIST}" | sha256sum --check -
 tar -xzf "${SDIST}"
 cd "${PKG}-${PKG_VER}"
 
-# NDK 交叉环境（clang wrapper 自带 --target 与 sysroot；API level 进链接语义）
-export CC="${TOOLCHAIN}/${RUST_TARGET}${ANDROID_API_LEVEL}-clang"
-export CXX="${TOOLCHAIN}/${RUST_TARGET}${ANDROID_API_LEVEL}-clang++"
+# NDK 交叉环境（clang wrapper 自带 --target 与 sysroot；API level 进链接语义）。
+# CC/CXX 经中间包装器：剥离宿主 Python sysconfig CFLAGS 注入的 -I/usr/include
+# 等 glibc 路径（与 NDK sysroot 头冲突是唯一致命项；对一切注入来源生效）
+REAL_CC="${TOOLCHAIN}/${RUST_TARGET}${ANDROID_API_LEVEL}-clang"
+REAL_CXX="${TOOLCHAIN}/${RUST_TARGET}${ANDROID_API_LEVEL}-clang++"
+make_wrapper() {
+    local real="$1" out="$2"
+    {
+        echo '#!/bin/bash'
+        echo 'args=()'
+        echo 'for a in "$@"; do'
+        echo '  case "$a" in'
+        echo '    -I/usr/include|-I/usr/local/include|-I/usr/include/x86_64-linux-gnu) ;;'
+        echo '    *) args+=("$a");;'
+        echo '  esac'
+        echo 'done'
+        echo "exec '${real}' "'"${args[@]}"'
+    } > "${out}"
+    chmod +x "${out}"
+}
+WRAP_DIR="$(mktemp -d)"
+make_wrapper "${REAL_CC}" "${WRAP_DIR}/cc"
+make_wrapper "${REAL_CXX}" "${WRAP_DIR}/cxx"
+export CC="${WRAP_DIR}/cc"
+export CXX="${WRAP_DIR}/cxx"
 export AR="${TOOLCHAIN}/llvm-ar"
 export LD="${TOOLCHAIN}/ld"
 export STRIP="${TOOLCHAIN}/llvm-strip"
