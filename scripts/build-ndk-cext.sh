@@ -50,6 +50,16 @@ make_wrapper() {
         echo '    *) args+=("$a");;'
         echo '  esac'
         echo 'done'
+        # 输出为 .so 时确保 -shared（宿主 LDSHARED 自带而 wrapper 透传丢失；
+        # 缺失时 lld 按可执行链 → undefined symbol: main/PyModule_Create2）
+        echo 'out=""; prev="";'
+        echo 'for a in "${args[@]}"; do'
+        echo '  if [ "$prev" = "-o" ]; then out="$a"; fi'
+        echo '  prev="$a"'
+        echo 'done'
+        echo 'if [[ "$out" == *.so && " ${args[*]} " != *" -shared "* ]]; then'
+        echo '  exec "'"${real}"'" -shared "${args[@]}"'
+        echo 'fi'
         echo "exec '${real}' "'"${args[@]}"'
     } > "${out}"
     chmod +x "${out}"
