@@ -111,6 +111,9 @@ def patchelf_add_needed(data: bytes, libname: str) -> bytes:
 # Linux 惯例名 → Android 系统库真名（NDK sysroot 链接产出 .so.1 形态）
 ANDROID_NEEDED_RENAME = {
     "libz.so.1": "libz.so",
+    "libc.so.6": "libc.so",
+    "libm.so.6": "libm.so",
+    "libdl.so.2": "libdl.so",
 }
 
 
