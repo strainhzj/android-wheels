@@ -58,10 +58,11 @@ import re, pathlib
 p = pathlib.Path("setup.py")
 src = p.read_text(encoding="utf-8")
 pattern = re.compile(
-    r'(?m)^\s*_add_directory\((include_dirs|library_dirs), "/[^"]*"\)\s*$'
+    r'(?m)^(?P<indent>[ \t]*)_add_directory\((include_dirs|library_dirs), "/[^"]*"\)\s*$'
 )
 src, n = pattern.subn(
-    lambda m: f"pass  # CROSS-STRIPPED ({m.group(1)})", src
+    lambda m: f"{m.group('indent')}pass  # CROSS-STRIPPED ({m.group(2)})",
+    src,
 )
 print(f"CROSS-STRIPPED {n} host-path injections")
 p.write_text(src, encoding="utf-8")
